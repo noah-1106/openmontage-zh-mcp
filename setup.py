@@ -15,6 +15,9 @@ setup(
         "requests>=2.31",
         "google-auth>=2.0",
     ],
+    package_data={
+        "tools.graphics.fonts": ["*.otf", "*.ttf", "*.ttc"],
+    },
     extras_require={
         "mcp": ["mcp>=1.0.0"],
     },

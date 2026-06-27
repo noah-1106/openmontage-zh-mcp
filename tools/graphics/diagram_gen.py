@@ -118,6 +118,14 @@ class DiagramGen(BaseTool):
         except ImportError:
             return False
 
+    def _load_fonts(
+        self, body_size: int = 18, title_size: int = 24
+    ) -> tuple[Any, Any]:
+        """Load a CJK-capable font for Chinese labels and titles."""
+        from tools.graphics.fonts import get_font_pair
+
+        return get_font_pair(body_size, title_size)
+
     def execute(self, inputs: dict[str, Any]) -> ToolResult:
         diagram_type = inputs["diagram_type"]
         start = time.time()
@@ -210,12 +218,7 @@ class DiagramGen(BaseTool):
         img = Image.new("RGB", (width, height), bg)
         draw = ImageDraw.Draw(img)
 
-        try:
-            font = ImageFont.truetype("arial.ttf", 18)
-            title_font = ImageFont.truetype("arial.ttf", 24)
-        except (IOError, OSError):
-            font = ImageFont.load_default()
-            title_font = font
+        font, title_font = self._load_fonts(18, 24)
 
         # Draw title
         y_offset = 20
@@ -321,10 +324,7 @@ class DiagramGen(BaseTool):
         output_path.parent.mkdir(parents=True, exist_ok=True)
         width = inputs.get("width", 800)
 
-        try:
-            font = ImageFont.truetype("consola.ttf", 16)
-        except (IOError, OSError):
-            font = ImageFont.load_default()
+        font = self._load_fonts(16)[0]
 
         # Calculate needed height
         lines = text.split("\n")
