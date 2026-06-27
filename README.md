@@ -77,7 +77,9 @@ make mcp-inspector
 2. **中文配置向导**：运行 `python3 scripts/config_wizard.py` 即可交互式配置 LLM、图像/视频/TTS/音乐提供商，支持 DeepSeek、通义千问、智谱、Moonshot、百川、可灵、海螺、豆包、通义听悟等国内主流模型。
 3. **MCP Server**：新增 `openmontage_mcp/` 包，将 OpenMontage 包装为 MCP 服务。
 4. **前端示例中文化**：Remotion Composer 的默认示例文案、Demo 数据已改为中文。
-5. **中文字体支持**：内置思源黑体（Noto Sans SC）、思源宋体（Noto Serif SC）、站酷小薇、站酷庆科黄油、站酷快乐等中文字体，中文标题和字幕不再 fallback 到系统默认字体。
+5. **中文字体支持**：
+   - **Remotion 渲染**：内置思源黑体（Noto Sans SC）、思源宋体（Noto Serif SC）、站酷小薇、站酷庆科黄油、站酷快乐等中文字体，中文标题和字幕不再 fallback 到系统默认字体。
+   - **Pillow 图形回退**：`diagram_gen` 等工具的 Pillow fallback 路径现在会自动使用系统中文字体（PingFang、STHeiti、WenQuanYi、Noto CJK），无系统字体时自动下载缓存 Noto Sans SC 作为兜底，避免中文显示为乱码或方块。
 
 ---
 
