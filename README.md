@@ -30,10 +30,52 @@
 2. **中文配置向导**：运行 `python3 scripts/config_wizard.py` 即可交互式配置 LLM、图像/视频/TTS/音乐提供商，支持 DeepSeek、通义千问、智谱、Moonshot、百川、可灵、海螺、豆包、通义听悟等国内主流模型。
 3. **MCP Server**：通过 `python -m openmontage_mcp.server` 启动，Claude Code / Cursor / Copilot 等外部 Agent 可直接调用 OpenMontage 的全部工具能力，无需常驻端口。
 4. **前端示例中文化**：Remotion Composer 的默认示例文案、Demo 数据已改为中文。
+5. **中文字体支持**：内置思源黑体（Noto Sans SC）、思源宋体（Noto Serif SC）、站酷小薇、站酷庆科黄油、站酷快乐等中文字体，中文标题和字幕不再 fallback 到系统默认字体。
 
 如果你希望直接给 AI 编程助手下达中文指令来制作视频，这是更合适的起点。
 
 ---
+
+## 快速开始
+
+### 安装与运行
+
+```bash
+git clone https://github.com/noah-1106/openmontage-zh-mcp.git
+cd openmontage-zh-mcp
+make setup
+```
+
+### 配置服务商
+
+```bash
+python3 scripts/config_wizard.py
+```
+
+支持 LLM、图像、视频、TTS、音乐、素材库等主流国内外服务商，国内模型友好。
+
+### 启动 MCP Server
+
+```bash
+python -m openmontage_mcp.server --project-dir .
+```
+
+在 Claude Code / Cursor 中配置：
+
+```json
+{
+  "mcpServers": {
+    "openmontage": {
+      "command": "python",
+      "args": ["-m", "openmontage_mcp.server", "--project-dir", "/path/to/openmontage-zh-mcp"]
+    }
+  }
+}
+```
+
+---
+
+## 下面是原版 OpenMontage 的完整介绍
 
 将您的 AI 编程助手变成一个完整的视频制作工作室。用通俗的语言描述您的需求——您的智能体会自动处理研究、脚本编写、资产生成、剪辑以及最终合成。
 

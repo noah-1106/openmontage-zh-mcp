@@ -17,6 +17,15 @@ import { CaptionOverlay, WordCaption } from "./components/CaptionOverlay";
 import { CollageBurst, CollageBurstProps } from "./CollageBurst";
 import { LyricOverlay, LyricOverlayProps } from "./LyricOverlay";
 
+import { loadChineseFont } from "./lib/fonts";
+
+// Preload Chinese fonts so they are available for compositions that render CJK text.
+loadChineseFont("NotoSansSC");
+loadChineseFont("NotoSerifSC");
+loadChineseFont("ZCOOLXiaoWei");
+loadChineseFont("ZCOOLQingKeHuangYou");
+loadChineseFont("ZCOOLKuaiLe");
+
 // ---------------------------------------------------------------------------
 // Theme System — prevents every video from looking like dark fintech
 // ---------------------------------------------------------------------------
@@ -31,6 +40,8 @@ export interface ThemeConfig {
   headingFont: string;
   bodyFont: string;
   monoFont: string;
+  /** Optional Chinese font used as fallback for CJK characters. */
+  chineseFont?: "NotoSansSC" | "NotoSerifSC" | "ZCOOLXiaoWei" | "ZCOOLQingKeHuangYou" | "ZCOOLKuaiLe";
   chartColors: string[];
   springConfig: { damping: number; stiffness: number; mass: number };
   transitionDuration: number;
@@ -49,6 +60,7 @@ export const THEMES: Record<string, ThemeConfig> = {
     headingFont: "Inter",
     bodyFont: "Inter",
     monoFont: "JetBrains Mono",
+    chineseFont: "NotoSansSC",
     chartColors: ["#2563EB", "#F59E0B", "#10B981", "#8B5CF6", "#EC4899", "#06B6D4"],
     springConfig: { damping: 20, stiffness: 120, mass: 1 },
     transitionDuration: 0.4,
@@ -65,6 +77,7 @@ export const THEMES: Record<string, ThemeConfig> = {
     headingFont: "Space Grotesk",
     bodyFont: "Space Grotesk",
     monoFont: "Fira Code",
+    chineseFont: "NotoSansSC",
     chartColors: ["#7C3AED", "#EC4899", "#06B6D4", "#F59E0B", "#10B981", "#EF4444"],
     springConfig: { damping: 12, stiffness: 80, mass: 1 },
     transitionDuration: 0.3,
@@ -81,6 +94,7 @@ export const THEMES: Record<string, ThemeConfig> = {
     headingFont: "IBM Plex Sans",
     bodyFont: "IBM Plex Sans",
     monoFont: "IBM Plex Mono",
+    chineseFont: "NotoSerifSC",
     chartColors: ["#E94560", "#1A1A2E", "#0F3460", "#9CA3AF"],
     springConfig: { damping: 25, stiffness: 150, mass: 1 },
     transitionDuration: 0.5,
@@ -97,6 +111,7 @@ export const THEMES: Record<string, ThemeConfig> = {
     headingFont: "Noto Serif JP",
     bodyFont: "Noto Sans",
     monoFont: "Fira Code",
+    chineseFont: "ZCOOLXiaoWei",
     chartColors: ["#FFB347", "#2D5016", "#FF6B9D", "#A8E6CF", "#6B4C8A", "#E8927C"],
     springConfig: { damping: 18, stiffness: 60, mass: 1 },
     transitionDuration: 1.0,
