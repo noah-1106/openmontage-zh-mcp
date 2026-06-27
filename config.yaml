@@ -1,0 +1,27 @@
+llm:
+  provider: anthropic
+  model: claude-sonnet-4-6
+  temperature: 0.7
+  max_tokens: 4096
+budget:
+  mode: warn
+  total_usd: 10.0
+  reserve_pct: 0.1
+  single_action_approval_usd: 0.5
+  require_approval_for_new_paid_tool: true
+checkpoint:
+  policy: guided
+  storage_dir: pipeline
+output:
+  default_format: mp4
+  default_codec: libx264
+  default_audio_codec: aac
+  default_resolution: 1920x1080
+  default_fps: 30
+  default_crf: 23
+paths:
+  pipeline_dir: pipeline
+  library_dir: library
+  styles_dir: styles
+  skills_dir: skills
+  output_dir: output

@@ -1,0 +1,95 @@
+{
+  "theme": "flat-motion-graphics",
+  "cuts": [
+    {
+      "id": "world-hook",
+      "source": "",
+      "type": "hero_title",
+      "in_seconds": 0,
+      "out_seconds": 3.5,
+      "text": "数字中的世界",
+      "subtitle": "一个仅使用 Remotion 组件构建的零密钥演示",
+      "backgroundColor": "#0F172A"
+    },
+    {
+      "id": "world-population",
+      "source": "",
+      "type": "stat_card",
+      "in_seconds": 3.5,
+      "out_seconds": 7.5,
+      "stat": "81 亿",
+      "subtitle": "共享同一个互联星球的人们",
+      "accentColor": "#22D3EE",
+      "backgroundColor": "#0F172A"
+    },
+    {
+      "id": "world-cities",
+      "source": "",
+      "type": "bar_chart",
+      "in_seconds": 7.5,
+      "out_seconds": 13,
+      "title": "代表性特大城市人口",
+      "chartData": [
+        { "label": "东京", "value": 37 },
+        { "label": "德里", "value": 33 },
+        { "label": "上海", "value": 29 },
+        { "label": "圣保罗", "value": 22 }
+      ],
+      "chartColors": ["#22D3EE", "#A78BFA", "#F59E0B", "#34D399"],
+      "showGrid": true,
+      "showValues": true,
+      "backgroundColor": "#0F172A"
+    },
+    {
+      "id": "world-energy",
+      "source": "",
+      "type": "pie_chart",
+      "in_seconds": 13,
+      "out_seconds": 18,
+      "title": "代表性能源结构",
+      "chartData": [
+        { "label": "可再生能源", "value": 34 },
+        { "label": "天然气", "value": 27 },
+        { "label": "煤炭", "value": 21 },
+        { "label": "核能", "value": 18 }
+      ],
+      "chartColors": ["#34D399", "#22D3EE", "#F97316", "#A78BFA"],
+      "donut": true,
+      "centerLabel": "可再生能源",
+      "centerValue": "34%",
+      "showLegend": true,
+      "backgroundColor": "#0F172A"
+    },
+    {
+      "id": "world-close",
+      "source": "",
+      "type": "text_card",
+      "in_seconds": 18,
+      "out_seconds": 22,
+      "text": "宏大的系统，人性化的决策。",
+      "color": "#F8FAFC",
+      "backgroundColor": "#0F172A"
+    }
+  ],
+  "overlays": [
+    {
+      "type": "section_title",
+      "in_seconds": 7.8,
+      "out_seconds": 10.8,
+      "text": "城市",
+      "subtitle": "密集的枢纽让规模变得可见",
+      "accentColor": "#22D3EE"
+    },
+    {
+      "type": "stat_reveal",
+      "in_seconds": 14.2,
+      "out_seconds": 17.6,
+      "text": "34%",
+      "subtitle": "代表性可再生能源占比",
+      "accentColor": "#34D399",
+      "position": "bottom-right"
+    }
+  ],
+  "captions": [],
+  "audio": {}
+}
