@@ -33,6 +33,14 @@ PROVIDERS = {
             {"name": "Moonshot 月之暗面", "key": "MOONSHOT_API_KEY", "base_url_env": "MOONSHOT_BASE_URL", "model": "moonshot-v1-8k"},
             {"name": "百川", "key": "BAICHUAN_API_KEY", "base_url_env": "BAICHUAN_BASE_URL", "model": "Baichuan4"},
             {"name": "OpenRouter", "key": "OPENROUTER_API_KEY", "base_url_env": "OPENROUTER_BASE_URL", "model": "anthropic/claude-3.5-sonnet"},
+            {"name": "AutoDL - DeepSeek-V4-Pro", "key": "AUTODL_API_KEY", "base_url_env": "AUTODL_BASE_URL", "model": "DeepSeek-V4-Pro"},
+            {"name": "AutoDL - GLM-5.2", "key": "AUTODL_API_KEY", "base_url_env": "AUTODL_BASE_URL", "model": "GLM-5.2"},
+            {"name": "AutoDL - Qwen3.7-Max", "key": "AUTODL_API_KEY", "base_url_env": "AUTODL_BASE_URL", "model": "qwen3.7-max"},
+            {"name": "AutoDL - Kimi-K2.6", "key": "AUTODL_API_KEY", "base_url_env": "AUTODL_BASE_URL", "model": "Kimi-K2.6"},
+            {"name": "AutoDL - GPT-5.5", "key": "AUTODL_API_KEY", "base_url_env": "AUTODL_BASE_URL", "model": "gpt-5.5"},
+            {"name": "AutoDL - Claude-Opus-4-8", "key": "AUTODL_API_KEY", "base_url_env": "AUTODL_BASE_URL", "model": "claude-opus-4-8"},
+            {"name": "AutoDL - MiniMax-M2.7", "key": "AUTODL_API_KEY", "base_url_env": "AUTODL_BASE_URL", "model": "MiniMax-M2.7"},
+            {"name": "AutoDL - Gemini-3.1-Pro-Preview", "key": "AUTODL_API_KEY", "base_url_env": "AUTODL_BASE_URL", "model": "gemini-3.1-pro-preview"},
             {"name": "Ollama (本地)", "key": None, "base_url_env": "OLLAMA_BASE_URL", "model": "qwen2.5:7b"},
             {"name": "跳过", "key": None, "base_url_env": None, "model": None},
         ],
@@ -165,7 +173,7 @@ def save_env(env: dict[str, str]) -> None:
                                 "DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "QWEN_API_KEY", "QWEN_BASE_URL",
                                 "ZHIPU_API_KEY", "ZHIPU_BASE_URL", "MOONSHOT_API_KEY", "MOONSHOT_BASE_URL",
                                 "BAICHUAN_API_KEY", "BAICHUAN_BASE_URL", "OPENROUTER_API_KEY", "OPENROUTER_BASE_URL",
-                                "OLLAMA_BASE_URL"],
+                                "AUTODL_API_KEY", "AUTODL_BASE_URL", "OLLAMA_BASE_URL"],
             "图像生成": ["FAL_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY", "QWEN_IMAGE_API_KEY", "ZHIPU_IMAGE_API_KEY", "BAIDU_IMAGE_API_KEY"],
             "视频生成": ["FAL_KEY", "MINIMAX_API_KEY", "KLING_API_KEY", "QWEN_VIDEO_API_KEY", "ZHIPU_VIDEO_API_KEY",
                        "RUNWAY_API_KEY", "HEYGEN_API_KEY", "VIDEO_GEN_LOCAL_ENABLED", "VIDEO_GEN_LOCAL_MODEL",
@@ -224,6 +232,14 @@ def provider_to_config(provider_name: str) -> tuple[str, str | None]:
         "百川": ("openai", "Baichuan4"),
         "OpenRouter": ("openrouter", None),
         "Ollama (本地)": ("ollama", "qwen2.5:7b"),
+        "AutoDL - DeepSeek-V4-Pro": ("autodl", "DeepSeek-V4-Pro"),
+        "AutoDL - GLM-5.2": ("autodl", "GLM-5.2"),
+        "AutoDL - Qwen3.7-Max": ("autodl", "qwen3.7-max"),
+        "AutoDL - Kimi-K2.6": ("autodl", "Kimi-K2.6"),
+        "AutoDL - GPT-5.5": ("autodl", "gpt-5.5"),
+        "AutoDL - Claude-Opus-4-8": ("autodl", "claude-opus-4-8"),
+        "AutoDL - MiniMax-M2.7": ("autodl", "MiniMax-M2.7"),
+        "AutoDL - Gemini-3.1-Pro-Preview": ("autodl", "gemini-3.1-pro-preview"),
     }
     return mapping.get(provider_name, ("anthropic", None))
 
@@ -252,6 +268,7 @@ def run_wizard() -> int:
                     "MOONSHOT_BASE_URL": "https://api.moonshot.cn/v1",
                     "BAICHUAN_BASE_URL": "https://api.baichuan-ai.com/v1",
                     "OPENROUTER_BASE_URL": "https://openrouter.ai/api/v1",
+                    "AUTODL_BASE_URL": "https://www.autodl.art/api/v1",
                 }.get(llm_choice["base_url_env"], "")
                 base_url = ask(f"请输入 API Base URL（可选）", default_base)
                 if base_url:
