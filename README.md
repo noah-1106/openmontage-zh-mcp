@@ -95,8 +95,20 @@ make setup
 
 ### 配置服务商（中文向导）
 
+**交互式配置（适合用户手动操作）：**
+
 ```bash
 python3 scripts/config_wizard.py
+```
+
+**非交互式配置（适合 Agent 直接执行）：**
+
+```bash
+python3 scripts/config_wizard.py --non-interactive --json '{
+  "llm": {"provider": "AutoDL 模型广场（对话模型）", "key": "YOUR_AUTODL_KEY", "model": "DeepSeek-V4-Pro"},
+  "image": {"provider": "AutoDL 模型广场（生图）", "key": "YOUR_AUTODL_KEY", "model": "gpt-image-2"},
+  "video": {"provider": "AutoDL 模型广场（生视频）", "key": "YOUR_AUTODL_KEY", "model": "doubao-seedance-2-0-260128"}
+}'
 ```
 
 支持 LLM、图像、视频、TTS、音乐、素材库等主流国内外服务商。
