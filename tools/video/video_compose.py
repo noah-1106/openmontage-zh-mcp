@@ -789,17 +789,129 @@ class VideoCompose(BaseTool):
                 error=f"Atelier render completed but output file missing: {output_path}",
             )
 
-        return ToolResult(
-            success=True,
-            data={
-                "operation": "render",
-                "composition_mode": "atelier",
-                "entry": str(entry_path),
-                "composition_id": comp_id,
-                "output": str(output_path),
-            },
-            artifacts=[str(output_path)],
+        # --- Atelier post-render review -------------------------------------
+        # The cut-schema paths run _run_final_review (technical/visual/audio
+        # probes + transcript-vs-script). Atelier MUST do the same so hero
+        # renders aren't shipped without the safety net — and additionally
+        # enforce the bespoke doctrine: no stock-registry imports, an
+        # art-direction declaration must exist. The distinctness review
+        # ("could this be any other product's video?") stays human; what we
+        # automate here is the *doctrine bypass*, not the taste call.
+        final_review = self._run_final_review(
+            output_path=output_path,
+            edit_decisions=edit_decisions,
+            proposal_packet=inputs.get("proposal_packet"),
+            narration_transcript_path=inputs.get("narration_transcript_path"),
+            script_text=inputs.get("script_text"),
         )
+
+        atelier_checks = self._run_atelier_checks(entry_path, bespoke)
+        final_review.setdefault("checks", {})["atelier"] = atelier_checks
+        final_review["issues_found"] = list(final_review.get("issues_found", [])) + atelier_checks.get("issues", [])
+
+        # Escalate atelier-critical issues (stock reuse) to the overall status.
+        # Missing art-direction is a warning, not a fail — it shows in issues_found.
+        if atelier_checks.get("stock_reuse_detected"):
+            final_review["status"] = "fail"
+            final_review["recommended_action"] = "re_author"
+
+        data: dict[str, Any] = {
+            "operation": "render",
+            "composition_mode": "atelier",
+            "entry": str(entry_path),
+            "composition_id": comp_id,
+            "output": str(output_path),
+            "final_review": final_review,
+            "final_review_status": final_review.get("status"),
+        }
+
+        if final_review.get("status") == "fail":
+            return ToolResult(
+                success=False,
+                error=(
+                    "Atelier render produced an invalid output:\n"
+                    + "\n".join(f"  • {i}" for i in final_review.get("issues_found", []))
+                ),
+                data=data,
+                artifacts=[str(output_path)],
+            )
+
+        return ToolResult(success=True, data=data, artifacts=[str(output_path)])
+
+    # Stock-registry import patterns that violate the atelier doctrine.
+    # Any of these inside a bespoke project tree means a creative component
+    # was reused instead of hand-stitched. Engine knowledge (the `remotion`
+    # package, `@remotion/*`, project-local files) is fine.
+    _ATELIER_STOCK_IMPORT_RE = (
+        r"""from\s+["']("""
+        # parent-traversed paths into the stock src/
+        r"""(?:\.\./)+src/(?:components|Explainer|CinematicRenderer|"""
+        r"""TitledVideo|TalkingHead|CollageBurst|LyricOverlay|cinematic|crucix|phantom)"""
+        # or absolute-ish paths into the same
+        r"""|remotion-composer/src/(?:components|Explainer|CinematicRenderer|"""
+        r"""TitledVideo|TalkingHead|CollageBurst|LyricOverlay|cinematic|crucix|phantom)"""
+        r""")"""
+    )
+
+    def _run_atelier_checks(self, entry_path: Path, bespoke: dict[str, Any]) -> dict[str, Any]:
+        """Doctrine-enforcement checks specific to atelier mode.
+
+        Returns a dict with two checks:
+          - stock_reuse_detected (bool) + offending_imports (list) — CRITICAL,
+            fails the render. Catches `import X from "../../src/components/..."`
+            and similar reuse of stock creative components.
+          - art_direction_declared (bool) + art_direction (str|None) — WARNING.
+            Forces step 1 of the bespoke-composition skill (commit to a fresh
+            art direction per video) to be written down rather than skipped.
+        """
+        import re as _re
+
+        issues: list[str] = []
+        offending: list[dict[str, str]] = []
+        project_dir = entry_path.parent
+        pat = _re.compile(self._ATELIER_STOCK_IMPORT_RE)
+
+        try:
+            for f in project_dir.rglob("*"):
+                if not f.is_file() or f.suffix.lower() not in {".tsx", ".ts", ".jsx", ".js"}:
+                    continue
+                try:
+                    txt = f.read_text(encoding="utf-8", errors="replace")
+                except Exception:
+                    continue
+                for m in pat.finditer(txt):
+                    offending.append({"file": str(f.relative_to(project_dir)), "import": m.group(1)})
+        except Exception as e:  # pragma: no cover — never let the check itself break a render
+            issues.append(f"atelier stock-reuse scan errored: {e}")
+
+        stock_reuse_detected = bool(offending)
+        if stock_reuse_detected:
+            issues.append(
+                "atelier doctrine violation: bespoke project imports from the stock "
+                "creative registry. Hand-author the scene instead — the registry is "
+                "a mechanics codex, not a parts bin. Offending imports: "
+                + ", ".join(f"{o['file']} → {o['import']}" for o in offending[:5])
+                + ("…" if len(offending) > 5 else "")
+            )
+
+        art_direction = bespoke.get("art_direction") or bespoke.get("art_direction_note")
+        art_direction_declared = bool(art_direction and str(art_direction).strip())
+        if not art_direction_declared:
+            issues.append(
+                "atelier warning: no bespoke.art_direction declared. Per "
+                "skills/meta/bespoke-composition.md step 1, every atelier piece must "
+                "commit to a fresh art direction (palette, type, motion, signature "
+                "device) before authoring. Pass edit_decisions.bespoke.art_direction "
+                "as a short note or a path to art-direction.md."
+            )
+
+        return {
+            "stock_reuse_detected": stock_reuse_detected,
+            "offending_imports": offending,
+            "art_direction_declared": art_direction_declared,
+            "art_direction": str(art_direction) if art_direction else None,
+            "issues": issues,
+        }
 
     @staticmethod
     def _build_theme_from_playbook(
