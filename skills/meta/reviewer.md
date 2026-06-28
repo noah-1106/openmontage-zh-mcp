@@ -327,11 +327,17 @@ The templated→atelier inversion (`AGENT_GUIDE.md` → "Composition Authoring M
 1. The compose stage's `final_review.checks.atelier` block must exist. If absent: **CRITICAL** — "Atelier render skipped doctrine checks — `_render_via_atelier` returned without `atelier` checks; investigate tool wiring."
 2. If `final_review.checks.atelier.stock_reuse_detected == true`: **CRITICAL** — "Stock-registry import inside bespoke project ({offending_imports[0].file} → {offending_imports[0].import}). Hand-author the scene; do not import from the stock src/."
 3. If `final_review.checks.atelier.art_direction_declared == false`: **CRITICAL** — "Atelier render with no art-direction declaration. Set `edit_decisions.bespoke.art_direction` before re-render."
-4. **Distinctness review (human-judged, mandatory).** Before approving the render, the reviewer must explicitly answer in the review record:
+4. **Scene distinctness — no hero-component spine (mandatory record).** Sample one representative frame per scene (e.g. mid-window of each `props.sections[i]`) and answer in the review record:
+   - *Does each scene have a distinct primary visual subject?* If two or more scenes share their primary visual (same hero element merely re-captioned — the candle that never leaves, the browser frame on every beat, the score ring as scaffolding): **CRITICAL** — "Hero-component spine detected: scenes {ids} share their primary visual subject. Per `skills/meta/bespoke-composition.md` step 1.5, each scene must earn its own composition; the signature device belongs to one climactic beat, not as scaffolding. Re-plan the affected scenes."
+   - *Is the signature device named in `art_direction` actually present in at least one beat?* (no ⇒ CRITICAL, re-author or update the declaration to match what was actually built)
+   - *Is the signature device present in **most** beats?* (yes ⇒ CRITICAL — see hero-component-spine above; signature is meant to be scarce)
+   This check cannot be skipped silently; absence of a recorded scene-by-scene inventory is itself **CRITICAL** ("scene_distinctness inventory not recorded").
+5. **Captions / on-screen text dedup (mandatory check).** Compare the active caption text to any on-screen text rendered in the same time window:
+   - If they are the same content (caption echoes the scene's title/headline that the narration is already reading aloud): **CRITICAL** — "Caption duplicates on-screen text at {t}s ('{text}'). Decide once per piece whether captions add meaning (numbers, names, translations) or are accessibility subtitles; do not do both for the same line. Either clear `captions=[]` for these scenes or remove the redundant on-screen SerifLine."
+6. **Distinctness review (human-judged, mandatory).** Before approving the render, the reviewer must explicitly answer in the review record:
    - *"Could this video be any other product's video?"* (yes ⇒ CRITICAL, re-author art direction)
    - *"Does its visual language reuse a look from a prior piece I've made?"* (yes ⇒ CRITICAL, re-author)
-   - *"Is the signature device named in `art_direction` actually present in the rendered frames?"* (no ⇒ CRITICAL, re-author or update the declaration to match what was actually built)
    Distinctness is taste-call territory the tool can't automate; reviewer absence on this question is itself a **CRITICAL** finding ("distinctness review not recorded").
 
 ### At publish stage (when composition_mode == "atelier"):
-1. All four atelier compose-stage findings above must show `resolved` in the review record. Any unresolved: **CRITICAL** — "Cannot publish atelier piece with unresolved doctrine or distinctness findings."
+1. All six atelier compose-stage checks above (existence of `atelier` block, stock_reuse, art_direction_declared, scene_distinctness, captions/text dedup, human distinctness review) must show `resolved` in the review record. Any unresolved: **CRITICAL** — "Cannot publish atelier piece with unresolved doctrine or distinctness findings."

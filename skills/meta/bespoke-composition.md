@@ -43,6 +43,37 @@ direction each time. Write it down (a short `art-direction.md` in the project) a
 Ask yourself: *what visual metaphor belongs to this subject that I have not used before?* If the
 answer resembles a past piece, you haven't found the direction yet.
 
+### 1.5 Plan each scene as its own composition — no hero-component spine
+The most insidious form of templating sneaks back in at the *scene* level: pick one striking
+visual (a candle, a browser frame, a score ring), then re-use it every scene with different
+text underneath. The piece feels custom because the hero is custom — but every scene is
+mechanically the same composition. That's branded slides, not a film. **Don't do that.**
+
+The signature device named in your art-direction is meant to appear in **one or at most two
+beats** — typically the climactic moment — not as the visual scaffolding of every scene. It
+earns its weight by being scarce.
+
+For each scene in the plan, answer concretely *before* writing code:
+
+- **What is this scene's primary visual subject?** It must be *different* from the previous
+  scene's. A character. A diagram. A piece of evidence. A landscape. A typographic moment. The
+  signature device. A void. Each scene's primary subject is its job.
+- **Why does this beat exist?** What does it do for the story that no other beat does? If you
+  can collapse two scenes into one without losing meaning, you should.
+- **How does it differ visually from the scene before and after?** Different composition (rule
+  of thirds vs centered vs split). Different scale (intimate close vs wide field). Different
+  motion register (still vs busy). Different palette emphasis. Different type treatment.
+- **If you removed the signature device from this scene, would the scene still work?** If yes,
+  the signature device probably doesn't belong in this scene — it's there as filler. Cut it.
+
+The reviewer enforces this as a "scene_distinctness" check (see
+`skills/meta/reviewer.md` → Composition Authoring Mode Review): a recorded inventory of
+each scene's primary subject + first frame, and an explicit answer to "do any two scenes
+share their primary visual subject?" Yes ⇒ CRITICAL ⇒ re-plan.
+
+The corollary: the per-scene plan is a *first-class artifact*, not implied. Write it down
+(in `art-direction.md` or a sibling `scenes.md`) before authoring `Composition.tsx`.
+
 ### 2. Decide the motion language — principles, not presets
 Reach for **principle** skills, never finished animations:
 - **`framer-motion`** and **`lottie-bodymovin`** — Disney's 12 principles (anticipation, staging,
@@ -75,6 +106,13 @@ Recurring mechanics that bite if you don't know them:
 - **GSAP-in-Remotion**: use a `paused` timeline and `.seek(frame/fps)` — never `requestAnimationFrame`
   — so frames render deterministically.
 - **Fonts**: `loadFont()` from `@remotion/google-fonts/<Name>` at module scope, once.
+- **Captions vs on-screen text — pick one role, never both for the same content.** Decide
+  once per piece, before authoring: are captions adding meaning the spoken words can't carry
+  (a number, a name, a translation, a quote attribution), OR are they accessibility subtitles
+  echoing the narration? If your scene already displays a SerifLine that reads the script
+  verbatim, do NOT also emit an auto-caption with the same text — the doubled phrase looks
+  amateurish even when the rest of the scene is beautiful. Empty `captions=[]` in props, or
+  scope captions only to scenes where the on-screen text differs from what's being said.
 
 ### 5. Render through the atelier path (project-local, throwaway)
 Bespoke scenes are **throwaway and project-local** — they never enter the shared `src/` registry.
