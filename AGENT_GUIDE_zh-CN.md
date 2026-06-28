@@ -401,6 +401,12 @@ python3 scripts/install_chinese_fonts.py
 - 如果用户拒绝设置，继续用最佳可用路径 — 不要唠叨。
 - 如果多个工具共享同一个环境变量，按该环境变量分组（从 `dependencies` 字段读取）。
 
+OpenMontage 使用 `.env` 文件存储 API Key。`tools/base_tool.py` 和 `tools/tool_registry.py` 会在**模块导入时**自动加载项目根目录的 `.env`，将变量注入当前 Python 进程的 `os.environ`。因此：
+
+- Agent 只要从项目根目录启动并导入 OpenMontage 工具，就能自动读取 `.env` 中的 Key，无需用户每次粘贴。
+- 不要以“shell 里 `echo $KEY` 看不到”为由认为 Key 不存在；正确判断方式是运行 `from tools.tool_registry import registry; registry.discover()` 后的工具可用性汇总。
+- 如果 `.env` 缺失或 Key 未配置，优先引导用户运行 `python3 scripts/config_wizard.py`，由 Agent 代劳写入 `--non-interactive --json`。
+
 ### 设置提供协议
 
 当工具为 `UNAVAILABLE` 但可通过简单配置修复时，**向用户提供设置帮助，而不是默默绕过限制。** 许多工具只差一个环境变量就能工作。
