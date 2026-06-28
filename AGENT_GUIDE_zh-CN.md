@@ -380,7 +380,7 @@ python -c "from tools.tool_registry import registry; import json; registry.disco
 
 | 修复复杂度 | 操作 |
 |----------------|--------|
-| **1 分钟修复**（环境变量） | 主动提出现在帮助配置 — 从工具读取 `install_instructions` |
+| **1 分钟修复**（环境变量） | 主动提出现在帮助配置 — 从工具读取 `install_instructions`。优先使用中文配置向导：`python3 scripts/config_wizard.py`。用户也可以直接给你 API Key，由你通过 `--non-interactive --json` 代为写入配置。 |
 | **5 分钟修复**（安装） | 解释需要安装什么以及为什么 — 从工具读取 `install_instructions` |
 | **复杂修复**（GPU、模型下载） | 说明限制、解释它能解锁什么，然后继续 |
 
