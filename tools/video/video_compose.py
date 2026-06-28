@@ -735,25 +735,35 @@ class VideoCompose(BaseTool):
         if not entry_path.exists():
             return ToolResult(success=False, error=f"atelier entry not found: {entry_path}")
 
-        # The entry must live under remotion-composer/ so Remotion's bundler can
-        # resolve `remotion` and friends from node_modules. Project-local
-        # bespoke compositions therefore live at remotion-composer/projects/<slug>/.
+        # Remotion's bundler resolves `remotion` and friends by walking up from the
+        # entry file to find node_modules — so the entry must live under
+        # remotion-composer/ at render time. But OpenMontage's project convention is
+        # repo-root projects/<slug>/, where artifacts/assets/renders/ already live.
+        # Resolution: keep the source of truth under projects/<slug>/ and auto-stage
+        # a directory junction (Windows) / symlink (Unix) at
+        # remotion-composer/projects/<slug>/ → projects/<slug>/ so the bundler sees
+        # the entry inside the composer tree without us copying files. Junctions are
+        # weightless, idempotent across renders, and need no admin/dev-mode on Windows.
         try:
             entry_path.relative_to(composer_dir)
+            effective_entry = entry_path
         except ValueError:
-            return ToolResult(
-                success=False,
-                error=(
-                    f"atelier entry {entry_path} must live under {composer_dir} so the "
-                    f"Remotion bundler can resolve node_modules. Place bespoke "
-                    f"compositions under remotion-composer/projects/<slug>/ (gitignored)."
-                ),
-            )
+            try:
+                effective_entry = self._stage_atelier_project(entry_path, composer_dir)
+            except Exception as e:
+                return ToolResult(
+                    success=False,
+                    error=(
+                        f"atelier auto-stage failed for entry {entry_path}: {e}. "
+                        f"Either place the entry under {composer_dir}/projects/<slug>/ "
+                        f"directly, or fix the staging permission issue."
+                    ),
+                )
 
         output_path = Path(inputs.get("output_path", "renders/output.mp4")).resolve()
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        cmd = ["npx", "remotion", "render", str(entry_path), str(comp_id), str(output_path)]
+        cmd = ["npx", "remotion", "render", str(effective_entry), str(comp_id), str(output_path)]
 
         props_path = bespoke.get("props_path")
         if props_path:
@@ -819,6 +829,7 @@ class VideoCompose(BaseTool):
             "operation": "render",
             "composition_mode": "atelier",
             "entry": str(entry_path),
+            "effective_entry": str(effective_entry) if effective_entry != entry_path else None,
             "composition_id": comp_id,
             "output": str(output_path),
             "final_review": final_review,
@@ -837,6 +848,81 @@ class VideoCompose(BaseTool):
             )
 
         return ToolResult(success=True, data=data, artifacts=[str(output_path)])
+
+    # Source-file extensions that get staged into the composer tree at render time.
+    # Anything not in this set lives only under the real project dir (assets, renders,
+    # artifacts) and is referenced via --public-dir or absolute paths.
+    _ATELIER_STAGE_EXTS = {".tsx", ".ts", ".jsx", ".js", ".css"}
+
+    def _stage_atelier_project(self, entry_path: Path, composer_dir: Path) -> Path:
+        """Auto-stage a bespoke project under remotion-composer/projects/<slug>/.
+
+        The source of truth lives under the repo-root `projects/<slug>/` (where
+        artifacts/, assets/, renders/ already are). Remotion's webpack bundler,
+        however, resolves modules (`remotion`, `@remotion/*`) by walking up from
+        the entry's REAL location — so a directory junction/symlink would
+        dereference and webpack would fail to find node_modules. We copy the
+        source files into a sibling dir inside the composer tree instead.
+
+        mtime-skip semantics make repeat renders cheap (typical project is a
+        handful of small .tsx files). Non-source files (assets, renders, props
+        JSON) stay only in the real project dir and are referenced via
+        --public-dir or absolute paths in props.
+
+        Resolves the slug as the first path segment under a `projects/` ancestor;
+        falls back to the entry's parent directory name. Returns the staged entry
+        path.
+        """
+        import shutil
+
+        real_project_dir = entry_path.parent.resolve()
+
+        # Derive a stable slug. Prefer the first segment under a `projects/` ancestor.
+        slug = real_project_dir.name
+        try:
+            parts = real_project_dir.parts
+            if "projects" in parts:
+                i = parts.index("projects")
+                if i + 1 < len(parts):
+                    slug = parts[i + 1]
+        except Exception:
+            pass
+
+        staging_root = composer_dir / "projects"
+        staging_root.mkdir(parents=True, exist_ok=True)
+        staging_dir = staging_root / slug
+
+        # If a stale junction/symlink is in the way from an earlier (failed) attempt,
+        # remove it before creating a real staging directory.
+        if staging_dir.is_symlink() or (staging_dir.exists() and staging_dir.is_dir()
+                                        and staging_dir.resolve() != staging_dir):
+            try:
+                staging_dir.unlink()
+            except (OSError, PermissionError):
+                # Some Windows junctions need rmdir
+                import subprocess as _sp
+                _sp.run(["cmd", "/c", "rmdir", str(staging_dir)], check=True)
+
+        staging_dir.mkdir(parents=True, exist_ok=True)
+
+        # mtime-skip copy of source files only. Mirrors directory structure so
+        # relative imports work identically.
+        for src in real_project_dir.rglob("*"):
+            if not src.is_file():
+                continue
+            if src.suffix.lower() not in self._ATELIER_STAGE_EXTS:
+                continue
+            rel = src.relative_to(real_project_dir)
+            dst = staging_dir / rel
+            try:
+                if dst.exists() and dst.stat().st_mtime >= src.stat().st_mtime:
+                    continue
+            except OSError:
+                pass
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+
+        return staging_dir / entry_path.name
 
     # Stock-registry import patterns that violate the atelier doctrine.
     # Any of these inside a bespoke project tree means a creative component
