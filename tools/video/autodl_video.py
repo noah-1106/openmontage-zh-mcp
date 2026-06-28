@@ -225,7 +225,9 @@ class AutoDLVideo(BaseTool):
         }
 
         try:
-            create_resp = requests.post(tasks_url, headers=headers, json=payload, timeout=30)
+            # AutoDL may keep the POST connection open until the task completes
+            # (synchronous-style endpoint), so give it a generous timeout.
+            create_resp = requests.post(tasks_url, headers=headers, json=payload, timeout=300)
             if not create_resp.ok:
                 detail = create_resp.text or "no response body"
                 return ToolResult(
@@ -241,7 +243,7 @@ class AutoDLVideo(BaseTool):
             while True:
                 time.sleep(10)
                 status_resp = requests.get(
-                    f"{tasks_url}/{task_id}", headers=headers, timeout=30
+                    f"{tasks_url}/{task_id}", headers=headers, timeout=120
                 )
                 if not status_resp.ok:
                     detail = status_resp.text or "no response body"
