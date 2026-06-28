@@ -74,7 +74,7 @@ make mcp-inspector
 ### 2025-06-28
 
 1. **中文文档**：README、AGENT_GUIDE、PROJECT_CONTEXT 均已翻译为中文，降低国内开发者上手门槛。
-2. **中文配置向导**：运行 `python3 scripts/config_wizard.py` 即可交互式配置 LLM、图像/视频/TTS/音乐提供商，支持 DeepSeek、通义千问、智谱、Moonshot、百川、可灵、海螺、豆包、通义听悟等国内主流模型，以及 AutoDL 聚合平台上的 DeepSeek-V4-Pro、GLM-5.2、Qwen3.7-Max、Kimi-K2.6、GPT-5.5、Claude-Opus-4-8、MiniMax-M2.7、Gemini-3.1-Pro-Preview 等对话模型。
+2. **中文配置向导**：运行 `python3 scripts/config_wizard.py` 即可交互式配置 LLM、图像/视频/TTS/音乐提供商，支持 DeepSeek、通义千问、智谱、Moonshot、百川、可灵、海螺、豆包、通义听悟等国内主流模型，以及 AutoDL 模型广场上的对话模型（DeepSeek-V4-Pro、GLM-5.2、Qwen3.7-Max 等）和生图模型（gpt-image-2 等）。
 3. **MCP Server**：新增 `openmontage_mcp/` 包，将 OpenMontage 包装为 MCP 服务。
 4. **前端示例中文化**：Remotion Composer 的默认示例文案、Demo 数据已改为中文。
 5. **中文字体支持**：

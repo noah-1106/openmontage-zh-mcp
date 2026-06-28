@@ -51,7 +51,8 @@ PROVIDERS = {
         "title": "图像生成 - 用于生成视频所需图片素材",
         "options": [
             {"name": "fal.ai (FLUX / Seedance / Recraft)", "key": "FAL_KEY", "model": "fal-ai/flux/dev"},
-            {"name": "OpenAI DALL·E", "key": "OPENAI_API_KEY", "model": "dall-e-3"},
+            {"name": "OpenAI DALL·E / GPT Image", "key": "OPENAI_API_KEY", "model": "gpt-image-1"},
+            {"name": "AutoDL 模型广场（生图）", "key": "AUTODL_API_KEY", "model_env": "AUTODL_IMAGE_MODEL", "model_default": "gpt-image-2"},
             {"name": "Google Imagen (Vertex)", "key": "GOOGLE_API_KEY", "model": "imagen-3"},
             {"name": "通义万相 (Qwen Image)", "key": "QWEN_IMAGE_API_KEY", "model": "wanx-v1"},
             {"name": "智谱 CogView", "key": "ZHIPU_IMAGE_API_KEY", "model": "cogview-3"},
@@ -176,7 +177,7 @@ def save_env(env: dict[str, str]) -> None:
                                 "ZHIPU_API_KEY", "ZHIPU_BASE_URL", "MOONSHOT_API_KEY", "MOONSHOT_BASE_URL",
                                 "BAICHUAN_API_KEY", "BAICHUAN_BASE_URL", "OPENROUTER_API_KEY", "OPENROUTER_BASE_URL",
                                 "AUTODL_API_KEY", "AUTODL_BASE_URL", "OLLAMA_BASE_URL"],
-            "图像生成": ["FAL_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY", "QWEN_IMAGE_API_KEY", "ZHIPU_IMAGE_API_KEY", "BAIDU_IMAGE_API_KEY"],
+            "图像生成": ["FAL_KEY", "OPENAI_API_KEY", "AUTODL_API_KEY", "AUTODL_IMAGE_MODEL", "GOOGLE_API_KEY", "QWEN_IMAGE_API_KEY", "ZHIPU_IMAGE_API_KEY", "BAIDU_IMAGE_API_KEY"],
             "视频生成": ["FAL_KEY", "MINIMAX_API_KEY", "KLING_API_KEY", "QWEN_VIDEO_API_KEY", "ZHIPU_VIDEO_API_KEY",
                        "RUNWAY_API_KEY", "HEYGEN_API_KEY", "VIDEO_GEN_LOCAL_ENABLED", "VIDEO_GEN_LOCAL_MODEL",
                        "MODAL_LTX2_ENDPOINT_URL"],
