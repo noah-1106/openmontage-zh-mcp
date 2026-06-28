@@ -80,6 +80,7 @@ make mcp-inspector
 5. **中文字体支持**：
    - **Remotion 渲染**：内置思源黑体（Noto Sans SC）、思源宋体（Noto Serif SC）、站酷小薇、站酷庆科黄油、站酷快乐等中文字体，中文标题和字幕不再 fallback 到系统默认字体。
    - **Pillow 图形回退**：`diagram_gen` 等工具的 Pillow fallback 路径现在会自动使用系统中文字体（PingFang、STHeiti、WenQuanYi、Noto CJK），无系统字体时自动下载缓存 Noto Sans SC 作为兜底，避免中文显示为乱码或方块。
+6. **影影（Yinyin）Agent 灵魂文档**：新增中英文双版 Agent 人格与工作流指南（`.agents/soul-yinyin-zh-CN.md`、`.agents/soul-yinyin-en.md`），让外部 Agent 以更一致的产品人格与用户协作完成视频制作。
 
 ---
 
