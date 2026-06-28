@@ -155,7 +155,12 @@ cd remotion-composer && npm run start
 </p>
 
 <p align="center">
-  <a href="https://github.com/trending"><img src="https://img.shields.io/badge/%F0%9F%8F%86%20%231%20on%20GitHub%20Trending-Repository%20of%20the%20Day-8957E5?style=for-the-badge&labelColor=1a1a2e" alt="#1 on GitHub Trending — Repository of the Day"></a>
+  <a href="https://github.com/trending">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/%F0%9F%8F%86_Repository_of_the_Day-%231_on_GitHub_Trending-F6B543?style=for-the-badge&labelColor=0D1117&color=F6B543">
+      <img alt="🏆 Repository of the Day — #1 on GitHub Trending" src="https://img.shields.io/badge/%F0%9F%8F%86_Repository_of_the_Day-%231_on_GitHub_Trending-D9892A?style=for-the-badge&labelColor=0D1117&color=D9892A" height="48">
+    </picture>
+  </a>
 </p>
 
 <p align="center"><strong>Follow The Build</strong></p>
@@ -790,6 +795,18 @@ make test-contracts
 # Run all tests
 make test
 ```
+
+---
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=calesthio%2FOpenMontage&type=date&legend=top-left">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=calesthio/OpenMontage&type=date&theme=dark&legend=top-left" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=calesthio/OpenMontage&type=date&legend=top-left" />
+    <img alt="Star History Chart" src="https://api.star-history.com/image?repos=calesthio/OpenMontage&type=date&legend=top-left" />
+  </picture>
+</a>
 
 ---
 
