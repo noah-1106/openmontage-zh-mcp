@@ -7,6 +7,13 @@ Meta-skill that answers two questions:
 
 Read this before authoring any animated component or composition, and whenever you're choosing `render_runtime` at proposal time. It routes you to the right Layer 3 skill so you don't waste time hand-rolling what a plugin already solves.
 
+> **Authoring mode comes first.** Before runtime or library, decide *how* the composition is
+> built: **templated** (assemble stock `cut.type` scenes) vs **atelier** (hand-author from
+> scratch). Default to atelier for hero work and follow `skills/meta/bespoke-composition.md`.
+> The routing below applies within either mode — but in atelier mode the stock scene-types and
+> registry blocks are off-limits; you write your own. "Does a stock cut-type fit?" is **not** a
+> valid shortcut for a hero piece. See `AGENT_GUIDE.md` → "Composition Authoring Mode".
+
 ## When to use this skill
 
 Apply when:

@@ -15,6 +15,12 @@ Routing is driven by `edit_decisions.render_runtime` (locked at proposal):
 - `ffmpeg`     → FFmpeg concat/trim. Used only for simple video cuts without
                  composition, or when the approved path explicitly names FFmpeg.
 
+Authoring mode is orthogonal to runtime. Setting
+`edit_decisions.composition_mode = "atelier"` (or `renderer_family="bespoke"`)
+routes to a hand-authored, project-local Remotion composition that BYPASSES the
+cut-schema and the stock scene-type registry entirely — the "hand-stitched
+every time" path for hero/bespoke pieces. See `_render_via_atelier`.
+
 Silent runtime swaps are forbidden by governance. If the chosen runtime is
 unavailable or fails, this tool surfaces a structured blocker and waits for
 the agent to re-ask the user rather than substituting a different engine.
@@ -667,6 +673,134 @@ class VideoCompose(BaseTool):
             )
         return comp
 
+    def _render_via_atelier(
+        self,
+        inputs: dict[str, Any],
+        edit_decisions: dict[str, Any],
+    ) -> ToolResult:
+        """Render a hand-authored, project-local Remotion composition ("atelier" mode).
+
+        Unlike the cut-schema path, atelier mode does NOT route through the
+        stock Explainer/CinematicRenderer compositions, the cut.type scene
+        registry, or RENDERER_FAMILY_MAP. The agent hand-authors a bespoke
+        composition — its own scenes, theme, and motion — and points this
+        renderer at the project-local entry. This is the deliberate
+        "hand-stitched every time" path: zero reusable creative components,
+        a fresh visual language per video.
+
+        Contract — edit_decisions["bespoke"] = {
+            "entry":          <path to the project-local Remotion entry .tsx;
+                               MUST live under remotion-composer/ so the
+                               Remotion bundler can resolve node_modules.
+                               Convention: remotion-composer/projects/<slug>/index.tsx>,
+            "composition_id": <id registered in that entry's Root>,
+            "props_path":     <optional absolute path to a props JSON (--props)>,
+            "public_dir":     <optional path to a SMALL per-project public dir,
+                               avoids copying the bloated shared public/>,
+            "scale":          <optional float, e.g. 0.5 for a fast draft>,
+            "crf":            <optional int, e.g. 18 for a crisp final>,
+            "concurrency":    <optional int>,
+        }
+        """
+        bespoke = edit_decisions.get("bespoke") or {}
+        entry = bespoke.get("entry")
+        comp_id = bespoke.get("composition_id")
+        if not entry or not comp_id:
+            return ToolResult(
+                success=False,
+                error=(
+                    "atelier mode requires edit_decisions.bespoke.entry (path to the "
+                    "project-local Remotion entry .tsx) and edit_decisions.bespoke."
+                    "composition_id (the id registered in that entry's Root)."
+                ),
+            )
+
+        composer_dir = Path(__file__).resolve().parent.parent.parent / "remotion-composer"
+        if not composer_dir.exists() or not (composer_dir / "node_modules").exists():
+            return ToolResult(
+                success=False,
+                error=(
+                    f"remotion-composer or its node_modules is missing at {composer_dir}. "
+                    f"Run `cd remotion-composer && npm install` first."
+                ),
+            )
+
+        entry_path = Path(entry)
+        if not entry_path.is_absolute():
+            # Resolve relative to repo root first, then to the composer dir.
+            repo_root = composer_dir.parent
+            cand = (repo_root / entry).resolve()
+            entry_path = cand if cand.exists() else (composer_dir / entry).resolve()
+        entry_path = entry_path.resolve()
+        if not entry_path.exists():
+            return ToolResult(success=False, error=f"atelier entry not found: {entry_path}")
+
+        # The entry must live under remotion-composer/ so Remotion's bundler can
+        # resolve `remotion` and friends from node_modules. Project-local
+        # bespoke compositions therefore live at remotion-composer/projects/<slug>/.
+        try:
+            entry_path.relative_to(composer_dir)
+        except ValueError:
+            return ToolResult(
+                success=False,
+                error=(
+                    f"atelier entry {entry_path} must live under {composer_dir} so the "
+                    f"Remotion bundler can resolve node_modules. Place bespoke "
+                    f"compositions under remotion-composer/projects/<slug>/ (gitignored)."
+                ),
+            )
+
+        output_path = Path(inputs.get("output_path", "renders/output.mp4")).resolve()
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        cmd = ["npx", "remotion", "render", str(entry_path), str(comp_id), str(output_path)]
+
+        props_path = bespoke.get("props_path")
+        if props_path:
+            pp = Path(props_path).resolve()
+            if not pp.exists():
+                return ToolResult(success=False, error=f"atelier props_path not found: {pp}")
+            # Equals form is required for cross-platform path parsing (see _remotion_render).
+            cmd.append(f"--props={pp}")
+
+        public_dir = bespoke.get("public_dir")
+        if public_dir:
+            pd = Path(public_dir).resolve()
+            if pd.exists():
+                cmd.append(f"--public-dir={pd}")
+
+        if bespoke.get("scale"):
+            cmd.append(f"--scale={bespoke['scale']}")
+        if bespoke.get("crf") is not None:
+            cmd.append(f"--crf={bespoke['crf']}")
+        if bespoke.get("concurrency"):
+            cmd.append(f"--concurrency={bespoke['concurrency']}")
+
+        try:
+            # Run from inside the composer dir so npx resolves the local
+            # remotion binary (mirrors _remotion_render).
+            self.run_command(cmd, timeout=1800, cwd=composer_dir)
+        except Exception as e:
+            return ToolResult(success=False, error=f"Atelier (bespoke) Remotion render failed: {e}")
+
+        if not output_path.exists():
+            return ToolResult(
+                success=False,
+                error=f"Atelier render completed but output file missing: {output_path}",
+            )
+
+        return ToolResult(
+            success=True,
+            data={
+                "operation": "render",
+                "composition_mode": "atelier",
+                "entry": str(entry_path),
+                "composition_id": comp_id,
+                "output": str(output_path),
+            },
+            artifacts=[str(output_path)],
+        )
+
     @staticmethod
     def _build_theme_from_playbook(
         playbook_name: str | None,
@@ -937,6 +1071,19 @@ class VideoCompose(BaseTool):
         asset_manifest = inputs.get("asset_manifest")
         if not edit_decisions:
             return ToolResult(success=False, error="edit_decisions required for render")
+
+        # --- Atelier (bespoke) mode -------------------------------------
+        # Hand-authored, project-local Remotion composition. Deliberately
+        # bypasses the cut-schema, the stock scene-type registry, and the
+        # RENDERER_FAMILY_MAP. This is the "hand-stitched every time" path:
+        # the agent writes a fresh composition (its own scenes, theme, motion)
+        # under remotion-composer/projects/<slug>/ and points this renderer at
+        # it. No reusable creative components; a new visual language per video.
+        # Triggered by composition_mode="atelier" (or renderer_family="bespoke").
+        if (edit_decisions.get("composition_mode") == "atelier"
+                or edit_decisions.get("renderer_family") == "bespoke"):
+            return self._render_via_atelier(inputs, edit_decisions)
+
         if not asset_manifest:
             return ToolResult(success=False, error="asset_manifest required for render")
 
