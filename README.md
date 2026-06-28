@@ -74,13 +74,14 @@ make mcp-inspector
 ### 2025-06-28
 
 1. **中文文档**：README、AGENT_GUIDE、PROJECT_CONTEXT 均已翻译为中文，降低国内开发者上手门槛。
-2. **中文配置向导**：运行 `python3 scripts/config_wizard.py` 即可交互式配置 LLM、图像/视频/TTS/音乐提供商，支持 DeepSeek、通义千问、智谱、Moonshot、百川、可灵、海螺、豆包、通义听悟等国内主流模型，以及 [AutoDL 模型广场](https://autodl.art/large-model/market) 上的对话模型（DeepSeek-V4-Pro、GLM-5.2、Qwen3.7-Max 等）、生图模型（gpt-image-2 等）和生视频模型（doubao-seedance-2-0 等）。
-3. **MCP Server**：新增 `openmontage_mcp/` 包，将 OpenMontage 包装为 MCP 服务。
-4. **前端示例中文化**：Remotion Composer 的默认示例文案、Demo 数据已改为中文。
-5. **中文字体支持**：
+2. **中文配置向导**：运行 `python3 scripts/config_wizard.py` 即可交互式配置 LLM、图像/视频/TTS/音乐提供商；同时支持 `--non-interactive --json` 非交互模式，方便 Agent 直接执行配置，无需人工逐条输入。
+3. **国内大模型与模型广场支持**：原生支持 DeepSeek、通义千问、智谱、Moonshot、百川、可灵、海螺、豆包、通义听悟等国内主流模型；并接入 [AutoDL 模型广场](https://autodl.art/large-model/market)，一次配置 `AUTODL_API_KEY` 即可使用对话模型（DeepSeek-V4-Pro、GLM-5.2、Qwen3.7-Max 等）、生图模型（gpt-image-2 等）和生视频模型（doubao-seedance-2-0 等）。
+4. **MCP Server**：新增 `openmontage_mcp/` 包，将 OpenMontage 包装为 MCP 服务。
+5. **前端示例中文化**：Remotion Composer 的默认示例文案、Demo 数据已改为中文。
+6. **中文字体支持**：
    - **Remotion 渲染**：内置思源黑体（Noto Sans SC）、思源宋体（Noto Serif SC）、站酷小薇、站酷庆科黄油、站酷快乐等中文字体，中文标题和字幕不再 fallback 到系统默认字体。
    - **Pillow 图形回退**：`diagram_gen` 等工具的 Pillow fallback 路径现在会自动使用系统中文字体（PingFang、STHeiti、WenQuanYi、Noto CJK），无系统字体时自动下载缓存 Noto Sans SC 作为兜底，避免中文显示为乱码或方块。
-6. **影影（Yinyin）Agent 灵魂文档**：新增中英文双版 Agent 人格与工作流指南（`.agents/soul-yinyin-zh-CN.md`、`.agents/soul-yinyin-en.md`），让外部 Agent 以更一致的产品人格与用户协作完成视频制作。
+7. **影影（Yinyin）Agent 灵魂文档**：新增中英文双版 Agent 人格与工作流指南（`.agents/soul-yinyin-zh-CN.md`、`.agents/soul-yinyin-en.md`），让外部 Agent 以更一致的产品人格与用户协作完成视频制作。
 
 ---
 
