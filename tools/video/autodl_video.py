@@ -226,7 +226,16 @@ class AutoDLVideo(BaseTool):
 
         try:
             create_resp = requests.post(tasks_url, headers=headers, json=payload, timeout=30)
-            create_resp.raise_for_status()
+            if not create_resp.ok:
+                detail = create_resp.text or "no response body"
+                return ToolResult(
+                    success=False,
+                    error=(
+                        f"AutoDL video generation failed with HTTP {create_resp.status_code}.\n"
+                        f"URL: {tasks_url}\n"
+                        f"Response: {detail[:800]}"
+                    ),
+                )
             task_id = create_resp.json()["id"]
 
             while True:
@@ -234,7 +243,15 @@ class AutoDLVideo(BaseTool):
                 status_resp = requests.get(
                     f"{tasks_url}/{task_id}", headers=headers, timeout=30
                 )
-                status_resp.raise_for_status()
+                if not status_resp.ok:
+                    detail = status_resp.text or "no response body"
+                    return ToolResult(
+                        success=False,
+                        error=(
+                            f"AutoDL video task status check failed with HTTP {status_resp.status_code}.\n"
+                            f"Response: {detail[:800]}"
+                        ),
+                    )
                 status_data = status_resp.json()
                 status = status_data.get("status")
 
