@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import argparse
+import json
 import os
 import re
 import sys
@@ -192,7 +194,7 @@ def save_env(env: dict[str, str]) -> None:
 
         written = set()
         for section, keys in sections.items():
-            section_keys = [k for k in keys if k in env]
+            section_keys = [k for k in keys if k in env and k not in written]
             if not section_keys:
                 continue
             f.write(f"# --- {section} ---\n")
@@ -224,6 +226,45 @@ def update_config_yaml(llm_provider: str, llm_model: str | None) -> None:
         yaml.dump(config, f, allow_unicode=True, sort_keys=False, default_flow_style=False)
 
 
+def apply_provider_config(category: str, choice_name: str, values: dict[str, Any], env: dict[str, str]) -> None:
+    """Apply a single provider configuration (interactive or non-interactive)."""
+    options = {opt["name"]: opt for opt in PROVIDERS[category]["options"]}
+    choice = options.get(choice_name)
+    if choice is None:
+        raise ValueError(f"Unknown {category} provider: {choice_name}")
+
+    if choice.get("key"):
+        key_value = values.get("key") or values.get(choice["key"])
+        if key_value:
+            env[choice["key"]] = key_value
+        elif choice.get("value"):
+            env[choice["key"]] = choice["value"]
+
+        base_url_env = choice.get("base_url_env")
+        if base_url_env and values.get("base_url"):
+            env[base_url_env] = values["base_url"]
+
+    if category == "llm" and choice["name"] == "AutoDL 模型广场（对话模型）":
+        model = values.get("model")
+        if not model:
+            raise ValueError("AutoDL LLM requires 'model' field")
+        env["AUTODL_LLM_MODEL"] = model
+        provider, _ = provider_to_config(choice["name"])
+        update_config_yaml(provider, model)
+    elif category == "llm" and choice["name"] == "Ollama (本地)":
+        base_url = values.get("base_url", "http://localhost:11434")
+        env["OLLAMA_BASE_URL"] = base_url
+        update_config_yaml("ollama", choice.get("model"))
+    elif category == "llm":
+        provider, model = provider_to_config(choice["name"])
+        update_config_yaml(provider, model)
+
+    if choice.get("model_env"):
+        model_value = values.get("model") or values.get(choice["model_env"]) or choice.get("model_default")
+        if model_value:
+            env[choice["model_env"]] = model_value
+
+
 def provider_to_config(provider_name: str) -> tuple[str, str | None]:
     """Return (llm_provider, default_model) for config.yaml."""
     mapping = {
@@ -241,12 +282,24 @@ def provider_to_config(provider_name: str) -> tuple[str, str | None]:
     return mapping.get(provider_name, ("anthropic", None))
 
 
-def run_wizard() -> int:
+def _default_base_url(base_url_env: str | None) -> str:
+    if not base_url_env:
+        return ""
+    return {
+        "DEEPSEEK_BASE_URL": "https://api.deepseek.com/v1",
+        "QWEN_BASE_URL": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "ZHIPU_BASE_URL": "https://open.bigmodel.cn/api/paas/v4",
+        "MOONSHOT_BASE_URL": "https://api.moonshot.cn/v1",
+        "BAICHUAN_BASE_URL": "https://api.baichuan-ai.com/v1",
+        "OPENROUTER_BASE_URL": "https://openrouter.ai/api/v1",
+        "AUTODL_BASE_URL": "https://www.autodl.art/api/v1",
+    }.get(base_url_env, "")
+
+
+def _interactive_wizard(env: dict[str, str]) -> int:
     print_header("OpenMontage 配置向导")
     print("本向导将帮助你配置各类 AI 服务商的 API key。")
     print("说明：\n  - 可直接按回车跳过不想配置的项目\n  - API key 会保存到项目根目录的 .env 文件中\n  - LLM 选择会同步写入 config.yaml")
-
-    env = load_env()
 
     # LLM 配置
     llm_choice = choose(PROVIDERS["llm"]["title"], PROVIDERS["llm"]["options"])
@@ -254,46 +307,14 @@ def run_wizard() -> int:
 
     if llm_choice.get("key"):
         key = ask(f"请输入 {llm_choice['name']} 的 API Key")
+        base_url = ""
+        if llm_choice.get("base_url_env"):
+            base_url = ask(f"请输入 API Base URL（可选）", _default_base_url(llm_choice["base_url_env"]))
         if key:
-            env[llm_choice["key"]] = key
-            # 很多国内模型走 OpenAI 兼容端点，默认 base_url 非必填
-            if llm_choice.get("base_url_env"):
-                default_base = {
-                    "DEEPSEEK_BASE_URL": "https://api.deepseek.com/v1",
-                    "QWEN_BASE_URL": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-                    "ZHIPU_BASE_URL": "https://open.bigmodel.cn/api/paas/v4",
-                    "MOONSHOT_BASE_URL": "https://api.moonshot.cn/v1",
-                    "BAICHUAN_BASE_URL": "https://api.baichuan-ai.com/v1",
-                    "OPENROUTER_BASE_URL": "https://openrouter.ai/api/v1",
-                    "AUTODL_BASE_URL": "https://www.autodl.art/api/v1",
-                }.get(llm_choice["base_url_env"], "")
-                base_url = ask(f"请输入 API Base URL（可选）", default_base)
-                if base_url:
-                    env[llm_choice["base_url_env"]] = base_url
-
-        # AutoDL 需要再选具体模型
-        selected_model = llm_choice.get("model")
-        if llm_choice["name"] == "AutoDL 模型广场（对话模型）":
-            models = llm_choice.get("autodl_models", [])
-            print_header("请选择 AutoDL 对话模型")
-            for i, m in enumerate(models, 1):
-                print(f"  {i}. {m}")
-            while True:
-                choice = ask("请选择序号", "1")
-                if choice.isdigit():
-                    idx = int(choice) - 1
-                    if 0 <= idx < len(models):
-                        selected_model = models[idx]
-                        break
-                print("序号无效，请重新输入")
-            env["AUTODL_LLM_MODEL"] = selected_model
-
-        provider, _ = provider_to_config(llm_choice["name"])
-        update_config_yaml(provider, selected_model)
+            apply_provider_config("llm", llm_choice["name"], {"key": key, "base_url": base_url}, env)
     elif llm_choice["name"] == "Ollama (本地)":
         base_url = ask("请输入 Ollama Base URL", "http://localhost:11434")
-        env["OLLAMA_BASE_URL"] = base_url
-        update_config_yaml("ollama", llm_choice["model"])
+        apply_provider_config("llm", llm_choice["name"], {"base_url": base_url}, env)
 
     # 图像、视频、TTS、音乐、素材库
     for category in ("image", "video", "tts", "music", "stock"):
@@ -301,18 +322,18 @@ def run_wizard() -> int:
             continue
         choice = choose(PROVIDERS[category]["title"], PROVIDERS[category]["options"])
         if choice.get("key"):
+            values: dict[str, Any] = {}
             if choice.get("value"):
-                env[choice["key"]] = choice["value"]
+                values["key"] = choice["value"]
             else:
                 key = ask(f"请输入 {choice['name']} 的 API Key")
                 if key:
-                    env[choice["key"]] = key
+                    values["key"] = key
             if choice.get("model_env"):
                 model = ask(f"请输入默认声音/模型", choice.get("model_default", ""))
                 if model:
-                    env[choice["model_env"]] = model
-            elif choice.get("model"):
-                print(f"  默认模型: {choice['model']}")
+                    values["model"] = model
+            apply_provider_config(category, choice["name"], values, env)
 
     # Google 服务账号（可选）
     if ask_yes_no("是否配置 Google 服务账号（用于 Vertex Imagen / Cloud TTS）？"):
@@ -342,6 +363,75 @@ def run_wizard() -> int:
     print("  2. 或在 Claude Code / Cursor 中继续制作视频")
     print("  3. 运行 `python3 -m pytest tests/contracts/ -v` 验证基础工具")
     return 0
+
+
+def _non_interactive_wizard(config_json: str, env: dict[str, str]) -> int:
+    """Apply provider configuration from a JSON string.
+
+    Example JSON:
+    {
+      "llm": {"provider": "AutoDL 模型广场（对话模型）", "key": "...", "model": "DeepSeek-V4-Pro"},
+      "image": {"provider": "AutoDL 模型广场（生图）", "key": "...", "model": "gpt-image-2"},
+      "video": {"provider": "AutoDL 模型广场（生视频）", "key": "...", "model": "doubao-seedance-2-0-260128"}
+    }
+    """
+    try:
+        cfg = json.loads(config_json)
+    except json.JSONDecodeError as e:
+        print(f"JSON 解析失败: {e}", file=sys.stderr)
+        return 1
+
+    if not isinstance(cfg, dict):
+        print("配置必须是 JSON 对象", file=sys.stderr)
+        return 1
+
+    for category, values in cfg.items():
+        if category not in PROVIDERS:
+            print(f"未知配置类别: {category}", file=sys.stderr)
+            return 1
+        if not isinstance(values, dict):
+            print(f"{category} 必须是 JSON 对象", file=sys.stderr)
+            return 1
+        provider_name = values.get("provider")
+        if not provider_name:
+            print(f"{category} 缺少 provider 字段", file=sys.stderr)
+            return 1
+        try:
+            apply_provider_config(category, provider_name, values, env)
+        except ValueError as e:
+            print(f"配置 {category} 失败: {e}", file=sys.stderr)
+            return 1
+
+    # 兼容顶层 Google / HF 配置
+    if "google" in cfg:
+        g = cfg["google"]
+        for k in ("GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION"):
+            if g.get(k):
+                env[k] = g[k]
+    if "hf_token" in cfg:
+        env["HF_TOKEN"] = cfg["hf_token"]
+
+    save_env(env)
+    print(f"配置已保存到: {ENV_PATH}")
+    print(f"LLM 配置已更新到: {CONFIG_PATH}")
+    return 0
+
+
+def run_wizard() -> int:
+    parser = argparse.ArgumentParser(description="OpenMontage 配置向导")
+    parser.add_argument("--non-interactive", action="store_true", help="非交互模式，通过 --json 传入配置")
+    parser.add_argument("--json", type=str, help="非交互模式下的 JSON 配置字符串")
+    args = parser.parse_args()
+
+    env = load_env()
+
+    if args.non_interactive:
+        if not args.json:
+            print("非交互模式需要 --json 参数", file=sys.stderr)
+            return 1
+        return _non_interactive_wizard(args.json, env)
+
+    return _interactive_wizard(env)
 
 
 if __name__ == "__main__":
