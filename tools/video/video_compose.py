@@ -91,7 +91,13 @@ class VideoCompose(BaseTool):
             "output_path": {"type": "string"},
             "edit_decisions": {
                 "type": "object",
-                "description": "Full edit_decisions artifact (required for compose/render)",
+                "description": (
+                    "Full edit_decisions artifact (required for compose/render). "
+                    "Key fields: render_runtime ('remotion' | 'hyperframes' | 'ffmpeg'), "
+                    "composition_mode ('templated' | 'atelier'; default 'templated'). "
+                    "Set composition_mode='atelier' for bespoke hero pieces; route through "
+                    "skills/meta/bespoke-composition.md first."
+                ),
             },
             "asset_manifest": {
                 "type": "object",
