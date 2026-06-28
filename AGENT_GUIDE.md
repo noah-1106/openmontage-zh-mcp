@@ -4,6 +4,53 @@ Start here. This is the complete operating guide and agent contract for OpenMont
 
 For architecture, key files, and conventions see [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md).
 
+> **Chinese users:** 中文版指南见 [`AGENT_GUIDE_zh-CN.md`](AGENT_GUIDE_zh-CN.md)。
+
+## Using OpenMontage via MCP
+
+This repository also ships as an **MCP Server** (`openmontage_mcp`). When the user is connected through MCP (Claude Code, Cursor, Copilot, CrewAI, etc.), the agent still follows the same business workflow documented in this guide — only the tool-calling transport changes.
+
+### What MCP exposes
+
+MCP exposes **tool capabilities**, not business processes. Available MCP tools include:
+
+| MCP tool | Purpose | Underlying call |
+|---|---|---|
+| `list_capabilities` | Capability menu for preflight | `registry.provider_menu_summary()` |
+| `run_tool` | Execute any OpenMontage tool by name | `registry.get(name).execute(inputs)` |
+| `render_video` | Render final video | `video_compose` with `operation=render` |
+| `run_pipeline_stage` | Advance one pipeline stage | `pipeline_loader.load_pipeline()` + checkpoint |
+| `get_pipeline_status` | Query pipeline progress | `checkpoint.get_completed_stages()` |
+| `get_job_status` | Poll async job status | In-memory job tracker |
+
+### MCP workflow rules
+
+1. **Business workflow is unchanged.** The production still moves through `idea -> research -> proposal -> script -> scene_plan -> assets -> edit -> compose`.
+2. **Preflight is still mandatory.** Use `list_capabilities` (or `run_tool` with `tool_name=tool_registry` and appropriate inputs) to discover available tools and present the capability menu.
+3. **Read stage director skills before acting.** MCP does not remove the need to read `skills/pipelines/<pipeline>/<stage>-director.md`.
+4. **Present both composition runtimes.** When available, surface Remotion and HyperFrames options to the user before choosing `render_runtime`.
+5. **Do not improvise outside tools.** MCP exposes the tool registry; do not write ad-hoc Python scripts to bypass it.
+
+### MCP configuration example
+
+```json
+{
+  "mcpServers": {
+    "openmontage": {
+      "command": "python",
+      "args": [
+        "-m",
+        "openmontage_mcp.server",
+        "--project-dir",
+        "/path/to/openmontage-zh-mcp"
+      ]
+    }
+  }
+}
+```
+
+Use the virtual-environment Python if the project is installed in a venv.
+
 ## First Interaction — Onboarding
 
 When the user's first message is vague, exploratory, or asks what you can do ("make me a video", "what can you do?", "help me create something", "I want to make content"), read the onboarding skill **before** doing anything else:

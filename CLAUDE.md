@@ -1,6 +1,7 @@
 # OpenMontage
 
 **MANDATORY: Read [`AGENT_GUIDE.md`](AGENT_GUIDE.md) before responding to ANY user message.**
+**中文版必读：** [`AGENT_GUIDE_zh-CN.md`](AGENT_GUIDE_zh-CN.md)
 
 Do not act on the user's request until you have read AGENT_GUIDE.md.
 It contains routing rules that determine your first action based on what the user asked.

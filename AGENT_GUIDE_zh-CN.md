@@ -4,6 +4,53 @@
 
 关于架构、关键文件与约定，请参阅 [`PROJECT_CONTEXT_zh-CN.md`](PROJECT_CONTEXT_zh-CN.md)。
 
+> **English version:** See [`AGENT_GUIDE.md`](AGENT_GUIDE.md).
+
+## 通过 MCP 使用 OpenMontage
+
+本仓库同时提供 **MCP Server**（`openmontage_mcp`）。当用户通过 MCP 连接时（Claude Code、Cursor、Copilot、CrewAI 等），智能体仍然遵循本指南记录的业务流程 —— 只有工具调用的传输层发生了变化。
+
+### MCP 暴露了什么
+
+MCP 暴露的是**工具能力**，而不是业务流程。可用的 MCP 工具包括：
+
+| MCP 工具 | 作用 | 底层调用 |
+|---|---|---|
+| `list_capabilities` | 起飞检查时的能力菜单 | `registry.provider_menu_summary()` |
+| `run_tool` | 按名称执行任意 OpenMontage 工具 | `registry.get(name).execute(inputs)` |
+| `render_video` | 渲染最终视频 | `video_compose` 的 `operation=render` |
+| `run_pipeline_stage` | 推进一个流水线阶段 | `pipeline_loader.load_pipeline()` + 检查点 |
+| `get_pipeline_status` | 查询流水线进度 | `checkpoint.get_completed_stages()` |
+| `get_job_status` | 轮询异步任务状态 | 内存中的 job tracker |
+
+### MCP 工作流规则
+
+1. **业务流程不变。** 制作仍然按 `idea → research → proposal → script → scene_plan → assets → edit → compose` 推进。
+2. **起飞检查仍然必须。** 使用 `list_capabilities`（或通过 `run_tool` 调用注册表工具）发现可用工具并展示能力菜单。
+3. **执行前仍须阅读阶段导演技能。** MCP 不能替代 `skills/pipelines/<pipeline>/<stage>-director.md` 的阅读。
+4. **仍然要呈现两种合成运行时。** 当 Remotion 和 HyperFrames 都可用时，在选定 `render_runtime` 前向用户展示两种选项。
+5. **不要绕开工具即兴编码。** MCP 已经暴露了工具注册表，不要编写临时 Python 脚本绕过它。
+
+### MCP 配置示例
+
+```json
+{
+  "mcpServers": {
+    "openmontage": {
+      "command": "python",
+      "args": [
+        "-m",
+        "openmontage_mcp.server",
+        "--project-dir",
+        "/path/to/openmontage-zh-mcp"
+      ]
+    }
+  }
+}
+```
+
+如果项目安装在虚拟环境中，请使用该虚拟环境的 Python 路径。
+
 ## 首次交互 — 入门引导
 
 当用户的第一条消息含糊、 exploratory，或询问你能做什么（"帮我做个视频"、"你能做什么？"、"帮我创作点东西"、"我想做内容"）时，**首先**阅读入门技能：
