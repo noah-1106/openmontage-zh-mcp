@@ -64,6 +64,7 @@ PROVIDERS = {
         "title": "视频生成 - 用于生成动态视频片段",
         "options": [
             {"name": "fal.ai (Kling / Veo / MiniMax / Seedance)", "key": "FAL_KEY", "model": "fal-ai/kling-video/v1/standard"},
+            {"name": "AutoDL 模型广场（生视频）", "key": "AUTODL_API_KEY", "model_env": "AUTODL_VIDEO_MODEL", "model_default": "doubao-seedance-2-0-260128"},
             {"name": "MiniMax 海螺", "key": "MINIMAX_API_KEY", "model": "video-01"},
             {"name": "可灵 Kling", "key": "KLING_API_KEY", "model": "kling-v1"},
             {"name": "通义万相视频", "key": "QWEN_VIDEO_API_KEY", "model": "wanx2.1-t2v-turbo"},
@@ -178,7 +179,7 @@ def save_env(env: dict[str, str]) -> None:
                                 "BAICHUAN_API_KEY", "BAICHUAN_BASE_URL", "OPENROUTER_API_KEY", "OPENROUTER_BASE_URL",
                                 "AUTODL_API_KEY", "AUTODL_BASE_URL", "OLLAMA_BASE_URL"],
             "图像生成": ["FAL_KEY", "OPENAI_API_KEY", "AUTODL_API_KEY", "AUTODL_IMAGE_MODEL", "GOOGLE_API_KEY", "QWEN_IMAGE_API_KEY", "ZHIPU_IMAGE_API_KEY", "BAIDU_IMAGE_API_KEY"],
-            "视频生成": ["FAL_KEY", "MINIMAX_API_KEY", "KLING_API_KEY", "QWEN_VIDEO_API_KEY", "ZHIPU_VIDEO_API_KEY",
+            "视频生成": ["FAL_KEY", "AUTODL_API_KEY", "AUTODL_VIDEO_MODEL", "MINIMAX_API_KEY", "KLING_API_KEY", "QWEN_VIDEO_API_KEY", "ZHIPU_VIDEO_API_KEY",
                        "RUNWAY_API_KEY", "HEYGEN_API_KEY", "VIDEO_GEN_LOCAL_ENABLED", "VIDEO_GEN_LOCAL_MODEL",
                        "MODAL_LTX2_ENDPOINT_URL"],
             "语音合成": ["ELEVENLABS_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY", "DOUBAO_SPEECH_API_KEY",
