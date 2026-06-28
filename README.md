@@ -157,8 +157,8 @@ cd remotion-composer && npm run start
 <p align="center">
   <a href="https://github.com/trending">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/%F0%9F%8F%86_Repository_of_the_Day-%231_on_GitHub_Trending-F6B543?style=for-the-badge&labelColor=0D1117&color=F6B543">
-      <img alt="🏆 Repository of the Day — #1 on GitHub Trending" src="https://img.shields.io/badge/%F0%9F%8F%86_Repository_of_the_Day-%231_on_GitHub_Trending-D9892A?style=for-the-badge&labelColor=0D1117&color=D9892A" height="48">
+      <source media="(prefers-color-scheme: dark)" srcset=".github/assets/repo-of-the-day-dark.svg">
+      <img alt="🏆 #1 Repository of the Day on GitHub Trending" src=".github/assets/repo-of-the-day-light.svg" height="60">
     </picture>
   </a>
 </p>
