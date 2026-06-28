@@ -33,14 +33,16 @@ PROVIDERS = {
             {"name": "Moonshot 月之暗面", "key": "MOONSHOT_API_KEY", "base_url_env": "MOONSHOT_BASE_URL", "model": "moonshot-v1-8k"},
             {"name": "百川", "key": "BAICHUAN_API_KEY", "base_url_env": "BAICHUAN_BASE_URL", "model": "Baichuan4"},
             {"name": "OpenRouter", "key": "OPENROUTER_API_KEY", "base_url_env": "OPENROUTER_BASE_URL", "model": "anthropic/claude-3.5-sonnet"},
-            {"name": "AutoDL - DeepSeek-V4-Pro", "key": "AUTODL_API_KEY", "base_url_env": "AUTODL_BASE_URL", "model": "DeepSeek-V4-Pro"},
-            {"name": "AutoDL - GLM-5.2", "key": "AUTODL_API_KEY", "base_url_env": "AUTODL_BASE_URL", "model": "GLM-5.2"},
-            {"name": "AutoDL - Qwen3.7-Max", "key": "AUTODL_API_KEY", "base_url_env": "AUTODL_BASE_URL", "model": "qwen3.7-max"},
-            {"name": "AutoDL - Kimi-K2.6", "key": "AUTODL_API_KEY", "base_url_env": "AUTODL_BASE_URL", "model": "Kimi-K2.6"},
-            {"name": "AutoDL - GPT-5.5", "key": "AUTODL_API_KEY", "base_url_env": "AUTODL_BASE_URL", "model": "gpt-5.5"},
-            {"name": "AutoDL - Claude-Opus-4-8", "key": "AUTODL_API_KEY", "base_url_env": "AUTODL_BASE_URL", "model": "claude-opus-4-8"},
-            {"name": "AutoDL - MiniMax-M2.7", "key": "AUTODL_API_KEY", "base_url_env": "AUTODL_BASE_URL", "model": "MiniMax-M2.7"},
-            {"name": "AutoDL - Gemini-3.1-Pro-Preview", "key": "AUTODL_API_KEY", "base_url_env": "AUTODL_BASE_URL", "model": "gemini-3.1-pro-preview"},
+            {"name": "AutoDL 模型广场（对话模型）", "key": "AUTODL_API_KEY", "base_url_env": "AUTODL_BASE_URL", "model": None, "model_env": "AUTODL_LLM_MODEL", "autodl_models": [
+                "DeepSeek-V4-Pro",
+                "GLM-5.2",
+                "qwen3.7-max",
+                "Kimi-K2.6",
+                "gpt-5.5",
+                "claude-opus-4-8",
+                "MiniMax-M2.7",
+                "gemini-3.1-pro-preview",
+            ]},
             {"name": "Ollama (本地)", "key": None, "base_url_env": "OLLAMA_BASE_URL", "model": "qwen2.5:7b"},
             {"name": "跳过", "key": None, "base_url_env": None, "model": None},
         ],
@@ -232,14 +234,7 @@ def provider_to_config(provider_name: str) -> tuple[str, str | None]:
         "百川": ("openai", "Baichuan4"),
         "OpenRouter": ("openrouter", None),
         "Ollama (本地)": ("ollama", "qwen2.5:7b"),
-        "AutoDL - DeepSeek-V4-Pro": ("autodl", "DeepSeek-V4-Pro"),
-        "AutoDL - GLM-5.2": ("autodl", "GLM-5.2"),
-        "AutoDL - Qwen3.7-Max": ("autodl", "qwen3.7-max"),
-        "AutoDL - Kimi-K2.6": ("autodl", "Kimi-K2.6"),
-        "AutoDL - GPT-5.5": ("autodl", "gpt-5.5"),
-        "AutoDL - Claude-Opus-4-8": ("autodl", "claude-opus-4-8"),
-        "AutoDL - MiniMax-M2.7": ("autodl", "MiniMax-M2.7"),
-        "AutoDL - Gemini-3.1-Pro-Preview": ("autodl", "gemini-3.1-pro-preview"),
+        "AutoDL 模型广场（对话模型）": ("autodl", None),
     }
     return mapping.get(provider_name, ("anthropic", None))
 
@@ -273,8 +268,26 @@ def run_wizard() -> int:
                 base_url = ask(f"请输入 API Base URL（可选）", default_base)
                 if base_url:
                     env[llm_choice["base_url_env"]] = base_url
-        provider, model = provider_to_config(llm_choice["name"])
-        update_config_yaml(provider, model)
+
+        # AutoDL 需要再选具体模型
+        selected_model = llm_choice.get("model")
+        if llm_choice["name"] == "AutoDL 模型广场（对话模型）":
+            models = llm_choice.get("autodl_models", [])
+            print_header("请选择 AutoDL 对话模型")
+            for i, m in enumerate(models, 1):
+                print(f"  {i}. {m}")
+            while True:
+                choice = ask("请选择序号", "1")
+                if choice.isdigit():
+                    idx = int(choice) - 1
+                    if 0 <= idx < len(models):
+                        selected_model = models[idx]
+                        break
+                print("序号无效，请重新输入")
+            env["AUTODL_LLM_MODEL"] = selected_model
+
+        provider, _ = provider_to_config(llm_choice["name"])
+        update_config_yaml(provider, selected_model)
     elif llm_choice["name"] == "Ollama (本地)":
         base_url = ask("请输入 Ollama Base URL", "http://localhost:11434")
         env["OLLAMA_BASE_URL"] = base_url
