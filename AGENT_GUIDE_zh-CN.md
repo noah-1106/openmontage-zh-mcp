@@ -333,6 +333,23 @@ python -c "from tools.tool_registry import registry; import json; registry.disco
 4. 报告：`passed`、`degraded` 或 `blocked` 之一。
 5. 在用户了解真实能力范围之前，不要开始制作。
 
+### 中文字体可用性检查
+
+对于任何包含中文文本渲染的制作（字幕、标题、覆盖层、Pillow 图形、Remotion 预览），在起飞检查阶段必须确认中文字体兜底可用。
+
+运行：
+
+```bash
+python3 scripts/install_chinese_fonts.py
+```
+
+- 成功：记录字体缓存路径，继续制作。
+- 失败：明确告知用户中文字幕/标题可能显示为“□□□”豆腐块。此时不要静默继续，而应：
+  1. 说明失败原因（通常是网络无法下载 Noto Sans SC fallback）；
+  2. 提供替代方案：稍后重试、手动放置中文字体到 `~/.openmontage/fonts/`、或改用 Remotion/Google Fonts 路径（如果该路径可用）。
+
+如果项目明确以中文交付，字体检查失败应标记为 `degraded` 或 `blocked`，并在提案中如实呈现。
+
 ### 提供商菜单（起飞检查必需）
 
 已通过上面的 `provider_menu_summary()` 获取。阅读该输出并**将其作为能力菜单呈现给用户**，而不是平铺工具列表。只在需要汇总中缺少的逐工具细节时才直接使用 `provider_menu()`。
@@ -391,7 +408,7 @@ python -c "from tools.tool_registry import registry; import json; registry.disco
 | 修复复杂度 | 操作 |
 |----------------|--------|
 | **1 分钟修复**（环境变量） | 主动提出现在帮助配置 — 从工具读取 `install_instructions`。优先使用中文配置向导：`python3 scripts/config_wizard.py`。用户也可以直接给你 API Key，由你通过 `--non-interactive --json` 代为写入配置。 |
-| **5 分钟修复**（安装） | 解释需要安装什么以及为什么 — 从工具读取 `install_instructions` |
+| **5 分钟修复**（安装） | 解释需要安装什么以及为什么 — 从工具读取 `install_instructions`。中文字体兜底属于此类：运行 `python3 scripts/install_chinese_fonts.py`。 |
 | **复杂修复**（GPU、模型下载） | 说明限制、解释它能解锁什么，然后继续 |
 
 **规则：**

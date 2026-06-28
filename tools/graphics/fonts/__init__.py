@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 FONT_CACHE_DIR = Path.home() / ".openmontage" / "fonts"
-NOTO_SANS_SC_URL = "https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/SimplifiedChinese/NotoSansSC-Regular.otf"
+NOTO_SANS_SC_URL = "https://cdn.jsdelivr.net/gh/notofonts/noto-cjk@main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf"
 NOTO_SANS_SC_FILENAME = "NotoSansSC-Regular.otf"
 
 
