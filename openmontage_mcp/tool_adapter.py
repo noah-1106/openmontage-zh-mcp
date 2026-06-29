@@ -3,11 +3,42 @@
 from __future__ import annotations
 
 import json
+import traceback
 from typing import Any
 
 from mcp.types import Tool, TextContent
 
 from tools.base_tool import BaseTool, ToolResult
+
+
+class MCPErrorCode:
+    AUTH = "E_AUTH"
+    TIMEOUT = "E_TIMEOUT"
+    INVALID_INPUT = "E_INVALID_INPUT"
+    RATE_LIMIT = "E_RATE_LIMIT"
+    RESOURCE_NOT_FOUND = "E_RESOURCE_NOT_FOUND"
+    PROVIDER_ERROR = "E_PROVIDER_ERROR"
+    UNKNOWN = "E_UNKNOWN"
+
+
+def classify_error(error_text: str | None) -> str:
+    """Map a raw error string to a structured error code."""
+    if not error_text:
+        return MCPErrorCode.UNKNOWN
+    err = error_text.lower()
+    if any(k in err for k in ("api key", "apikey", "not set", "unauthorized", "authentication", "auth")):
+        return MCPErrorCode.AUTH
+    if any(k in err for k in ("timed out", "timeout", "operation timed out")):
+        return MCPErrorCode.TIMEOUT
+    if any(k in err for k in ("rate limit", "rate_limit", "too many requests")):
+        return MCPErrorCode.RATE_LIMIT
+    if any(k in err for k in ("not found", "404", "resource not found", "invalid url")):
+        return MCPErrorCode.RESOURCE_NOT_FOUND
+    if any(k in err for k in ("validation failed", "invalid", "required", "schema")):
+        return MCPErrorCode.INVALID_INPUT
+    if any(k in err for k in ("http 5", "service unavailable", "internal server", "provider error")):
+        return MCPErrorCode.PROVIDER_ERROR
+    return MCPErrorCode.UNKNOWN
 
 
 def json_schema_to_mcp_parameters(schema: dict[str, Any]) -> dict[str, Any]:
@@ -20,7 +51,6 @@ def json_schema_to_mcp_parameters(schema: dict[str, Any]) -> dict[str, Any]:
     if not schema:
         return {"type": "object", "properties": {}}
 
-    # Ensure the root is an object schema with a properties dict.
     normalized: dict[str, Any] = dict(schema)
     normalized.setdefault("type", "object")
     normalized.setdefault("properties", {})
@@ -28,46 +58,76 @@ def json_schema_to_mcp_parameters(schema: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def tool_to_mcp(tool: BaseTool) -> Tool:
-    """Build an MCP Tool definition from a BaseTool instance."""
+def tool_to_capability_schema(tool: BaseTool) -> dict[str, Any]:
+    """Build a capability entry for list_capabilities.
+
+    Includes the tool's full input schema so the LLM can generate correct
+    parameters before calling run_tool.
+    """
     info = tool.get_info()
-    description = f"{tool.name} ({info.get('provider') or tool.provider})"
-    if tool.best_for:
-        description += "\nGood for: " + ", ".join(tool.best_for)
-    if info.get("install_instructions"):
-        description += f"\nSetup: {info['install_instructions']}"
-
-    return Tool(
-        name=tool.name,
-        description=description[:1024],
-        inputSchema=json_schema_to_mcp_parameters(tool.input_schema),
-    )
-
-
-def tool_result_to_mcp_contents(result: ToolResult) -> list[TextContent]:
-    """Convert a ToolResult into MCP TextContent items."""
-    payload: dict[str, Any] = {
-        "success": result.success,
-        "data": result.data,
-        "cost_usd": result.cost_usd,
-        "duration_seconds": result.duration_seconds,
+    return {
+        "name": tool.name,
+        "provider": info.get("provider") or tool.provider,
+        "capability": info.get("capability") or tool.capability,
+        "description": tool.best_for[0] if tool.best_for else tool.name,
+        "input_schema": tool.input_schema,
+        "install_instructions": info.get("install_instructions"),
+        "status": str(tool.get_status()),
+        "estimated_runtime_seconds": getattr(tool, "estimate_runtime", lambda _: 10)({}),
     }
-    if result.error:
-        payload["error"] = result.error
-    if result.artifacts:
-        payload["artifacts"] = result.artifacts
-
-    text = json.dumps(payload, ensure_ascii=False, indent=2)
-    return [TextContent(type="text", text=text)]
 
 
 def validate_inputs(tool: BaseTool, inputs: dict[str, Any]) -> None:
-    """Best-effort validation using the tool's declared input schema.
-
-    Raises ValueError if the input does not match the tool schema.
-    """
+    """Best-effort validation using the tool's declared input schema."""
     import jsonschema
 
     schema = tool.input_schema or {"type": "object"}
     if schema:
         jsonschema.validate(instance=inputs, schema=schema)
+
+
+def tool_result_to_mcp_response(result: ToolResult) -> dict[str, Any]:
+    """Convert a ToolResult into a normalized MCP response dict.
+
+    Both synchronous and asynchronous results use the same shape so the
+    LLM does not have to branch on whether the tool was deferred.
+    """
+    if not result.success:
+        return {
+            "status": "error",
+            "code": classify_error(result.error),
+            "message": result.error or "Tool execution failed",
+            "data": result.data,
+            "cost_usd": result.cost_usd,
+            "duration_seconds": result.duration_seconds,
+        }
+
+    payload: dict[str, Any] = {
+        "status": "completed",
+        "data": result.data,
+        "cost_usd": result.cost_usd,
+        "duration_seconds": result.duration_seconds,
+    }
+    if result.artifacts:
+        payload["artifacts"] = result.artifacts
+    if result.model:
+        payload["model"] = result.model
+    return payload
+
+
+def make_error_response(message: str, code: str = MCPErrorCode.UNKNOWN) -> list[TextContent]:
+    return [TextContent(
+        type="text",
+        text=json.dumps({
+            "status": "error",
+            "code": code,
+            "message": message,
+        }, ensure_ascii=False, indent=2),
+    )]
+
+
+def make_success_response(payload: dict[str, Any]) -> list[TextContent]:
+    return [TextContent(
+        type="text",
+        text=json.dumps(payload, ensure_ascii=False, indent=2),
+    )]

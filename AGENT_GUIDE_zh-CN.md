@@ -10,27 +10,93 @@
 
 本仓库同时提供 **MCP Server**（`openmontage_mcp`）。当用户通过 MCP 连接时（Claude Code、Cursor、Copilot、CrewAI 等），智能体仍然遵循本指南记录的业务流程 —— 只有工具调用的传输层发生了变化。
 
-### MCP 暴露了什么
+### MCP 暴露的工具
 
-MCP 暴露的是**工具能力**，而不是业务流程。可用的 MCP 工具包括：
+MCP 层只暴露**业务级入口**，不再把每个底层 provider 工具平铺成独立 MCP 工具。
 
-| MCP 工具 | 作用 | 底层调用 |
+| MCP 工具 | 作用 | 关键行为 |
 |---|---|---|
-| `list_capabilities` | 起飞检查时的能力菜单 | `registry.provider_menu_summary()` |
-| `run_tool` | 按名称执行任意 OpenMontage 工具 | `registry.get(name).execute(inputs)` |
-| `render_video` | 渲染最终视频 | `video_compose` 的 `operation=render` |
-| `run_pipeline_stage` | 推进一个流水线阶段 | `pipeline_loader.load_pipeline()` + 检查点 |
-| `get_pipeline_status` | 查询流水线进度 | `checkpoint.get_completed_stages()` |
-| `get_job_status` | 轮询异步任务状态 | 内存中的 job tracker |
+| `list_capabilities` | 起飞检查 + 查询每个工具的完整参数 schema | 支持 `category` 过滤，例如 `video_generation` |
+| `create_project` | 创建项目工作区 | 返回 `project_id` 和流水线阶段列表 |
+| `get_project_status` | 查询项目进度 | 返回已完成阶段、当前阶段、等待人类审批的阶段 |
+| `run_tool` | 执行任意 OpenMontage 工具 | **自动判断同步/异步**：短任务直接返回结果，长任务自动返回 `job_id` |
+| `render_video` | 渲染最终成片 | 自动读取项目的 `edit_decisions` + `asset_manifest`，异步返回 `job_id` |
+| `get_job_status` | 轮询异步任务 | 返回 `status`、`progress_percent`、`estimated_remaining_seconds`、`next_action` |
+| `list_jobs` | 列出所有异步任务 | 可按 `status` 或 `tool_name` 过滤 |
+| `cancel_job` | 取消异步任务 | 用于重试或用户变更需求 |
+| `write_checkpoint` | 写入流水线阶段检查点 | 推进或标记阶段状态 |
+
+**重要：** 不要再直接调用 `autodl_video`、`seedance_video` 等底层工具名作为 MCP 工具。它们只存在于 `run_tool` 的 `name` 参数中，由 `run_tool` 统一调度。
 
 ### MCP 工作流规则
 
 1. **业务流程不变。** 制作仍然按 `idea → research → proposal → script → scene_plan → assets → edit → compose` 推进。
-2. **起飞检查仍然必须。** 使用 `list_capabilities`（或通过 `run_tool` 调用注册表工具）发现可用工具并展示能力菜单。
-3. **执行前仍须阅读阶段导演技能。** MCP 不能替代 `skills/pipelines/<pipeline>/<stage>-director.md` 的阅读。
-4. **仍然要呈现两种合成运行时。** 当 Remotion 和 HyperFrames 都可用时，在选定 `render_runtime` 前向用户展示两种选项。
-5. **仍然要决定创作模式。** 模板化（`composition_mode: "templated"`）适合批量和草稿；工坊模式（`composition_mode: "atelier"`）适合重要作品。该决策独立于运行时选择，提案阶段就要确定。
-6. **不要绕开工具即兴编码。** MCP 已经暴露了工具注册表，不要编写临时 Python 脚本绕过它。
+2. **起飞检查必须。** 调用 `list_capabilities`，按 `category` 过滤所需能力，读取对应工具的 `input_schema`。
+3. **所有可能慢的操作都异步。** `run_tool` 会根据 `estimate_runtime()` 自动 defer；短任务同步返回，长任务返回 `job_id`。Agent 永远先检查返回的 `status` 字段。
+4. **轮询策略。** 拿到 `job_id` 后，调用 `get_job_status` 轮询。根据返回的 `next_action` 决定：
+   - `"poll_again"` → 等待 10–30 秒后再次查询
+   - `"done"` → 任务完成，读取 `data` / `artifacts`
+5. **项目上下文显式传递。** 调用 `run_tool` 时通过 `project_id` 指定项目；MCP 层会自动把相对路径解析为 `projects/<project_id>/` 下的绝对路径。
+6. **错误处理。** `run_tool` 失败会返回结构化错误码：`E_AUTH`（认证/余额）、`E_TIMEOUT`、`E_RATE_LIMIT`、`E_INVALID_INPUT`、`E_RESOURCE_NOT_FOUND`、`E_PROVIDER_ERROR`、`E_UNKNOWN`。根据错误码决定重试、换 provider 还是停止。
+7. **执行前仍须阅读阶段导演技能。** MCP 不能替代 `skills/pipelines/<pipeline>/<stage>-director.md` 的阅读。
+8. **仍然要呈现两种合成运行时。** 当 Remotion 和 HyperFrames 都可用时，在选定 `render_runtime` 前向用户展示两种选项。
+9. **仍然要决定创作模式。** 模板化（`composition_mode: "templated"`）适合批量和草稿；工坊模式（`composition_mode: "atelier"`）适合重要作品。该决策独立于运行时选择，提案阶段就要确定。
+10. **不要绕开工具即兴编码。** MCP 已经暴露了工具注册表，不要编写临时 Python 脚本绕过它。
+
+### MCP 调用示例
+
+#### 发现视频生成工具的 schema
+
+```json
+{
+  "category": "video_generation"
+}
+```
+
+返回每个工具（如 `autodl_video`、`seedance_video`）的 `input_schema`。Agent 用该 schema 生成 `run_tool` 的 `inputs`。
+
+#### 调用 AutoDL 生成视频
+
+```json
+{
+  "name": "autodl_video",
+  "inputs": {
+    "prompt": "...",
+    "model": "doubao-seedance-2-0-260128",
+    "operation": "text_to_video",
+    "duration": 5,
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "output_path": "assets/video/clip_01.mp4"
+  },
+  "project_id": "my-project"
+}
+```
+
+返回（异步）：
+
+```json
+{
+  "status": "queued",
+  "job_id": "...",
+  "tool_name": "autodl_video",
+  "estimated_seconds": 120,
+  "next_action": "poll_get_job_status"
+}
+```
+
+Agent 用 `get_job_status` 轮询。对于 `autodl_video`，第一轮完成后底层返回 `task_id` 和 `created` 状态；Agent 需要再次调用 `run_tool(name="autodl_video", inputs={"operation": "get_status", "task_id": "..."})` 轮询直到视频下载完成。
+
+#### 渲染成片
+
+```json
+{
+  "project_id": "my-project",
+  "output_path": "renders/final.mp4"
+}
+```
+
+`render_video` 自动读取 `projects/my-project/artifacts/edit_decisions.json` 和 `asset_manifest.json`，调用 `video_compose`，异步返回 `job_id`。
 
 ### MCP 配置示例
 
