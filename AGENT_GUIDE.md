@@ -12,24 +12,92 @@ This repository also ships as an **MCP Server** (`openmontage_mcp`). When the us
 
 ### What MCP exposes
 
-MCP exposes **tool capabilities**, not business processes. Available MCP tools include:
+MCP exposes **business-level entry points**, not a flat mirror of every provider tool.
 
-| MCP tool | Purpose | Underlying call |
+| MCP tool | Purpose | Key behavior |
 |---|---|---|
-| `list_capabilities` | Capability menu for preflight | `registry.provider_menu_summary()` |
-| `run_tool` | Execute any OpenMontage tool by name | `registry.get(name).execute(inputs)` |
-| `render_video` | Render final video | `video_compose` with `operation=render` |
-| `run_pipeline_stage` | Advance one pipeline stage | `pipeline_loader.load_pipeline()` + checkpoint |
-| `get_pipeline_status` | Query pipeline progress | `checkpoint.get_completed_stages()` |
-| `get_job_status` | Poll async job status | In-memory job tracker |
+| `list_capabilities` | Preflight capability menu + full input schemas | Optional `category` filter (e.g. `video_generation`); omit it to return all tools |
+| `create_project` | Create a project workspace | Returns `project_id` and the pipeline stage list |
+| `get_project_status` | Query project progress | Returns completed stages, current stage, and stages awaiting human approval |
+| `run_tool` | Execute any OpenMontage tool by name | **Auto sync/async**: short calls return immediately; long calls return a `job_id` |
+| `render_video` | Render the final video | Auto-reads `edit_decisions` + `asset_manifest` from the project; returns `E_PROJECT_ARTIFACT_MISSING` if either is missing |
+| `get_job_status` | Poll an async job | Returns `status`, `progress_percent`, `estimated_remaining_seconds`, `next_action` |
+| `list_jobs` | List deferred jobs | Filter by `status` or `tool_name` |
+| `cancel_job` | Cancel an async job | Use for retries or changed requirements |
+| `write_checkpoint` | Write a pipeline stage checkpoint | Advances or marks stage state |
+
+**Important:** Do not call low-level provider names such as `autodl_video` or `seedance_video` as MCP tools directly. They only appear as the `name` argument to `run_tool`.
 
 ### MCP workflow rules
 
-1. **Business workflow is unchanged.** The production still moves through `idea -> research -> proposal -> script -> scene_plan -> assets -> edit -> compose`.
-2. **Preflight is still mandatory.** Use `list_capabilities` (or `run_tool` with `tool_name=tool_registry` and appropriate inputs) to discover available tools and present the capability menu.
-3. **Read stage director skills before acting.** MCP does not remove the need to read `skills/pipelines/<pipeline>/<stage>-director.md`.
-4. **Present both composition runtimes.** When available, surface Remotion and HyperFrames options to the user before choosing `render_runtime`.
-5. **Do not improvise outside tools.** MCP exposes the tool registry; do not write ad-hoc Python scripts to bypass it.
+1. **Business workflow is unchanged.** Production still moves through `idea -> research -> proposal -> script -> scene_plan -> assets -> edit -> compose`.
+2. **Preflight is mandatory.** Call `list_capabilities`, optionally filter by `category`, and read the `input_schema` of the tools you need.
+3. **Everything that can be slow is async.** `run_tool` defers based on `estimate_runtime()`; short calls return synchronously, long calls return a `job_id`. Always inspect the returned `status` first.
+4. **Polling.** After receiving a `job_id`, call `get_job_status`. Use `next_action` to decide:
+   - `"poll_again"` -> wait 10-30 seconds and query again
+   - `"done"` -> read `data` / `artifacts`
+5. **Project context is explicit.** Pass `project_id` to `run_tool`; the MCP layer resolves relative paths under `projects/<project_id>/`. Nested paths work: `assets/video/clip.mp4` resolves to `projects/<id>/assets/video/clip.mp4`.
+6. **Concurrency limit.** When the number of running async jobs reaches the limit (default 4), new long-running submissions return `E_QUEUE_FULL`. Wait for an existing job or poll `list_jobs` before retrying.
+7. **Error handling.** `run_tool` failures return structured codes: `E_AUTH` (auth/balance), `E_TIMEOUT`, `E_RATE_LIMIT`, `E_INVALID_INPUT`, `E_RESOURCE_NOT_FOUND`, `E_PROJECT_ARTIFACT_MISSING` (missing project artifact), `E_QUEUE_FULL` (concurrency limit), `E_PROVIDER_ERROR`, `E_UNKNOWN`. Decide retry, provider switch, or stop based on the code.
+8. **Read stage director skills before acting.** MCP does not remove the need to read `skills/pipelines/<pipeline>/<stage>-director.md`.
+9. **Present both composition runtimes.** When available, surface Remotion and HyperFrames options before choosing `render_runtime`.
+10. **Decide the composition mode.** Templated mode (`composition_mode: "templated"`) is for batches and drafts; atelier mode (`composition_mode: "atelier"`) is for high-stakes work. Decide this during the proposal stage.
+11. **Do not improvise outside tools.** MCP exposes the tool registry; do not write ad-hoc Python scripts to bypass it.
+
+### MCP call examples
+
+#### Discover video generation schemas
+
+```json
+{
+  "category": "video_generation"
+}
+```
+
+Returns each tool's full `input_schema` (e.g. `autodl_video`, `seedance_video`). Use that schema to build `run_tool` inputs.
+
+#### Generate a video with AutoDL
+
+```json
+{
+  "name": "autodl_video",
+  "inputs": {
+    "prompt": "...",
+    "model": "doubao-seedance-2-0-260128",
+    "operation": "text_to_video",
+    "duration": 5,
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "output_path": "assets/video/clip_01.mp4"
+  },
+  "project_id": "my-project"
+}
+```
+
+Async response:
+
+```json
+{
+  "status": "queued",
+  "job_id": "...",
+  "tool_name": "autodl_video",
+  "estimated_seconds": 120,
+  "next_action": "poll_get_job_status"
+}
+```
+
+Poll with `get_job_status`. For `autodl_video`, the first completion returns a `task_id`; then call `run_tool(name="autodl_video", inputs={"operation": "get_status", "task_id": "..."})` repeatedly until the video downloads.
+
+#### Render final video
+
+```json
+{
+  "project_id": "my-project",
+  "output_path": "renders/final.mp4"
+}
+```
+
+`render_video` reads `projects/my-project/artifacts/edit_decisions.json` and `asset_manifest.json`, calls `video_compose`, and returns a `job_id`.
 
 ### MCP configuration example
 
@@ -42,7 +110,7 @@ MCP exposes **tool capabilities**, not business processes. Available MCP tools i
         "-m",
         "openmontage_mcp.server",
         "--project-dir",
-        "/path/to/openmontage-zh-mcp"
+        "/path/to/OpenMontage-main"
       ]
     }
   }

@@ -303,12 +303,19 @@ def _build_server() -> Server:
         def _execute() -> Any:
             return tool.execute(inputs)
 
-        if wait or estimated < _DEFER_THRESHOLD_SECONDS:
+        if wait or estimated <= _DEFER_THRESHOLD_SECONDS:
             try:
                 result = _execute()
             except Exception as exc:
                 return make_error_response(f"tool execution failed: {exc}", "E_UNKNOWN")
             return make_success_response(tool_result_to_mcp_response(result))
+
+        if not tracker.can_accept():
+            return make_error_response(
+                f"concurrent job limit reached ({tracker.max_concurrent_jobs}); "
+                "wait for a running job to finish or poll list_jobs",
+                "E_QUEUE_FULL",
+            )
 
         job_id = tracker.submit(_execute, tool_name=tool_name, estimated_seconds=estimated)
         return make_success_response({
@@ -331,12 +338,12 @@ def _build_server() -> Server:
         if not edit_decisions:
             return make_error_response(
                 f"edit_decisions not found for project {project_id}. Run the edit stage first.",
-                "E_RESOURCE_NOT_FOUND",
+                "E_PROJECT_ARTIFACT_MISSING",
             )
         if not asset_manifest:
             return make_error_response(
                 f"asset_manifest not found for project {project_id}. Run the assets stage first.",
-                "E_RESOURCE_NOT_FOUND",
+                "E_PROJECT_ARTIFACT_MISSING",
             )
 
         inputs: dict[str, Any] = {
@@ -347,6 +354,13 @@ def _build_server() -> Server:
         for key in ("output_path", "profile", "audio_path", "subtitle_path"):
             if key in arguments:
                 inputs[key] = resolve_project_path(project_id, arguments[key])
+
+        if not tracker.can_accept():
+            return make_error_response(
+                f"concurrent job limit reached ({tracker.max_concurrent_jobs}); "
+                "wait for a running job to finish or poll list_jobs",
+                "E_QUEUE_FULL",
+            )
 
         estimated = tool.estimate_runtime(inputs)
         job_id = tracker.submit(lambda: tool.execute(inputs), tool_name="video_compose", estimated_seconds=estimated)

@@ -164,7 +164,7 @@ class AutoDLVideo(BaseTool):
 
     def estimate_runtime(self, inputs: dict[str, Any]) -> float:
         if inputs.get("operation") == "get_status":
-            return 5.0
+            return 3.0
         return 120.0
 
     def execute(self, inputs: dict[str, Any]) -> ToolResult:

@@ -7,6 +7,7 @@ by job_id.
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 import uuid
@@ -39,9 +40,12 @@ class JobTracker:
     # higher progress resolution if the underlying tool provides it.
     _poll_interval: float = 5.0
 
-    def __init__(self) -> None:
+    def __init__(self, max_concurrent_jobs: int | None = None) -> None:
         self._jobs: dict[str, Job] = {}
         self._lock = threading.Lock()
+        self.max_concurrent_jobs = max_concurrent_jobs or int(
+            os.environ.get("OPENMONTAGE_MCP_MAX_CONCURRENT", "4")
+        )
 
     def submit(
         self,
@@ -179,6 +183,14 @@ class JobTracker:
     def is_complete(self, job_id: str) -> bool:
         state = self.get(job_id)
         return state is not None and state["status"] in {"completed", "failed", "cancelled"}
+
+    def can_accept(self) -> bool:
+        """Return True if a new deferred job can be started without exceeding the concurrency limit."""
+        with self._lock:
+            active = sum(
+                1 for job in self._jobs.values() if job.status in {"pending", "running"}
+            )
+        return active < self.max_concurrent_jobs
 
     def _next_action(self, job: Job) -> str:
         if job.status in {"completed", "failed", "cancelled"}:

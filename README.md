@@ -48,16 +48,97 @@ python -m openmontage_mcp.server --project-dir .
 }
 ```
 
-### 暴露的核心能力
+### 暴露的 MCP 工具（业务级入口）
 
-| MCP 工具 | 作用 |
-|---|---|
-| `list_capabilities` | 返回可用工具/能力菜单 |
-| `run_tool` | 按名称执行任意 tool |
-| `render_video` | 渲染视频（Remotion / HyperFrames / FFmpeg） |
-| `run_pipeline_stage` | 推进一个 pipeline stage |
-| `get_pipeline_status` | 查询项目进度 |
-| `get_job_status` | 查询异步任务状态 |
+MCP 层只暴露 9 个业务级工具，底层 provider 工具（如 `autodl_video`、`seedance_video`）不再作为独立 MCP 工具出现。
+
+| MCP 工具 | 作用 | 关键行为 |
+|---|---|---|
+| `list_capabilities` | 起飞检查 + 查询每个工具的完整参数 schema | 支持 `category` 过滤，例如 `video_generation`；不传则返回全部 |
+| `create_project` | 创建项目工作区 | 返回 `project_id` 和流水线阶段列表 |
+| `get_project_status` | 查询项目进度 | 返回已完成阶段、当前阶段、等待人类审批的阶段 |
+| `run_tool` | 执行任意 OpenMontage 工具 | **自动判断同步/异步**：短任务直接返回结果，长任务自动返回 `job_id` |
+| `render_video` | 渲染最终成片 | 自动读取项目的 `edit_decisions` + `asset_manifest`（缺失返回 `E_PROJECT_ARTIFACT_MISSING`），异步返回 `job_id` |
+| `get_job_status` | 轮询异步任务 | 返回 `status`、`progress_percent`、`estimated_remaining_seconds`、`next_action` |
+| `list_jobs` | 列出所有异步任务 | 可按 `status` 或 `tool_name` 过滤 |
+| `cancel_job` | 取消异步任务 | 用于重试或用户变更需求 |
+| `write_checkpoint` | 写入流水线阶段检查点 | 推进或标记阶段状态 |
+
+### Agent 使用规则
+
+1. **不要直接调用底层 provider 工具名。** `autodl_video` 等只应作为 `run_tool` 的 `name` 参数。
+2. **所有可能慢的操作都异步。** `run_tool` 根据 `estimate_runtime()` 自动 defer；拿到 `job_id` 就用 `get_job_status` 轮询。
+3. **项目路径显式传递。** 调用 `run_tool` 时通过 `project_id` 指定项目，相对路径自动解析为 `projects/<project_id>/` 下的绝对路径（支持嵌套）。
+4. **先看错误码再决策。** 错误码包括：`E_AUTH`、`E_TIMEOUT`、`E_RATE_LIMIT`、`E_INVALID_INPUT`、`E_RESOURCE_NOT_FOUND`、`E_PROJECT_ARTIFACT_MISSING`、`E_QUEUE_FULL`、`E_PROVIDER_ERROR`、`E_UNKNOWN`。
+5. **并发上限默认 4。** 超过会返回 `E_QUEUE_FULL`，Agent 应等待或用 `list_jobs` 查看。
+
+### AutoDL 视频生成示例（两步轮询）
+
+第一步，创建生成任务（异步）：
+
+```json
+{
+  "name": "autodl_video",
+  "project_id": "my-project",
+  "inputs": {
+    "prompt": "A serene mountain lake at sunrise, gentle mist rising, cinematic wide shot",
+    "model": "doubao-seedance-2-0-260128",
+    "operation": "text_to_video",
+    "duration": 5,
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "output_path": "assets/video/clip_01.mp4"
+  }
+}
+```
+
+返回：
+
+```json
+{
+  "status": "queued",
+  "job_id": "...",
+  "tool_name": "autodl_video",
+  "estimated_seconds": 120,
+  "next_action": "poll_get_job_status"
+}
+```
+
+用 `get_job_status` 轮询。完成后，底层结果里会有 `task_id`。
+
+第二步，用 `task_id` 轮询视频完成状态：
+
+```json
+{
+  "name": "autodl_video",
+  "project_id": "my-project",
+  "inputs": {
+    "operation": "get_status",
+    "task_id": "cgt-xxxxxxxx",
+    "output_path": "assets/video/clip_01.mp4"
+  }
+}
+```
+
+重复调用直到 `data.status` 变为 `succeeded`，视频会自动下载到 `projects/my-project/assets/video/clip_01.mp4`。
+
+### 在 Claude Code 中配置
+
+```json
+{
+  "mcpServers": {
+    "openmontage": {
+      "command": "python",
+      "args": [
+        "-m",
+        "openmontage_mcp.server",
+        "--project-dir",
+        "/path/to/openmontage-zh-mcp"
+      ]
+    }
+  }
+}
+```
 
 ### 调试
 
@@ -65,11 +146,57 @@ python -m openmontage_mcp.server --project-dir .
 make mcp-inspector
 ```
 
+端到端验证脚本：
+
+```bash
+python3 scripts/test_mcp_smoke.py
+```
+
 ---
 
 ## 我们的改动与更新
 
 本仓库基于 [calesthio/OpenMontage](https://github.com/calesthio/OpenMontage) 改造，保留原项目 AGPL-3.0 协议。这里是相对于原版的改动汇总：
+
+### 2025-06-29 — MCP 工具设计大更新
+
+MCP 层从"机械地平铺每个 provider 工具"升级为"面向 Agent 执行业务入口"。经过真实 AutoDL 端到端冒烟测试验证，新的设计让外部 Agent 调用更顺畅、错误更可处理、长任务不再超时。
+
+**主要变化：**
+
+1. **只暴露 9 个业务级 MCP 工具**
+   - `list_capabilities` — 起飞检查 + 按 `category` 过滤，返回完整 `input_schema`
+   - `create_project` — 创建项目工作区
+   - `get_project_status` — 查询项目当前阶段、已完成阶段、等待人类审批的阶段
+   - `run_tool` — 按名称执行任意 OpenMontage 工具
+   - `render_video` — 自动读取项目 `edit_decisions` + `asset_manifest` 渲染成片
+   - `get_job_status` — 轮询异步任务
+   - `list_jobs` — 列出任务，支持按 `status` / `tool_name` 过滤
+   - `cancel_job` — 取消异步任务
+   - `write_checkpoint` — 写入流水线阶段检查点
+
+2. **自动同步/异步切换**
+   - `run_tool` 根据工具 `estimate_runtime()` 自动判断：短任务同步返回结果，长任务返回 `job_id` 让 Agent 轮询
+   - 彻底解决了此前 `autodl_video` 等同步 MCP 工具 30 秒超时的问题
+
+3. **结构化错误码**
+   - 新增 `E_PROJECT_ARTIFACT_MISSING`（项目产物缺失）、`E_QUEUE_FULL`（并发队列满）
+   - 完整错误码：`E_AUTH`、`E_TIMEOUT`、`E_RATE_LIMIT`、`E_INVALID_INPUT`、`E_RESOURCE_NOT_FOUND`、`E_PROJECT_ARTIFACT_MISSING`、`E_QUEUE_FULL`、`E_PROVIDER_ERROR`、`E_UNKNOWN`
+
+4. **并发控制**
+   - 默认最多同时运行 4 个异步任务，超过返回 `E_QUEUE_FULL`
+   - 可通过环境变量 `OPENMONTAGE_MCP_MAX_CONCURRENT` 调整
+
+5. **项目路径自动解析**
+   - `run_tool` / `render_video` 中传入 `project_id` 后，相对路径自动解析到 `projects/<project_id>/`
+   - 支持任意层级嵌套，例如 `assets/video/clip.mp4`
+
+6. **AutoDL 视频生成改为 create + poll 两步模式**
+   - `autodl_video` 新增 `operation` 字段：`text_to_video` / `image_to_video` / `reference_to_video` / `get_status`
+   - 先生成任务拿到 `task_id`，再用 `operation=get_status` + `task_id` 轮询直到视频下载完成
+
+7. **新增端到端冒烟测试**
+   - `scripts/test_mcp_smoke.py`：完整跑通 `list_capabilities` → `create_project` → `get_project_status` → `run_tool(autodl_video create)` → `get_job_status` 轮询 → `run_tool(autodl_video get_status)` 轮询 → `list_jobs` → `render_video`
 
 ### 2025-06-28
 

@@ -261,6 +261,45 @@ python3 scripts/config_wizard.py --non-interactive --json '{
 
 如果你用 Claude Code、Cursor、CrewAI 这类 AI 编辑器或 Agent 框架，可以把 OpenMontage 当作一个 MCP 插件接入。这样其他 Agent 也能直接调用 OpenMontage 的能力来生成视频。
 
+MCP 层只暴露 9 个业务级工具，不会把每个底层 provider 工具（如 `autodl_video`）都平铺成独立 MCP 工具：
+
+| MCP 工具 | 作用 |
+|---|---|
+| `list_capabilities` | 起飞检查，返回所有工具清单和完整参数 schema |
+| `create_project` | 创建项目工作区 |
+| `get_project_status` | 查询项目当前阶段、已完成阶段 |
+| `run_tool` | 按名称执行任意 OpenMontage 工具；**慢任务自动异步返回 job_id** |
+| `render_video` | 渲染最终成片（自动读取 `edit_decisions` 和 `asset_manifest`） |
+| `get_job_status` | 轮询异步任务状态 |
+| `list_jobs` | 列出所有异步任务 |
+| `cancel_job` | 取消异步任务 |
+| `write_checkpoint` | 写入流水线阶段检查点 |
+
+**Agent 使用要点：**
+
+1. 不要直接调用 `autodl_video` 等作为 MCP 工具名，它们只作为 `run_tool` 的 `name` 参数。
+2. 慢操作（如视频生成、渲染）会返回 `job_id`，用 `get_job_status` 轮询。
+3. 传 `project_id` 时，相对路径会自动解析到 `projects/<project_id>/` 下，例如 `assets/video/clip.mp4`。
+4. 出错时先看 `code`：`E_AUTH`（认证/余额）、`E_TIMEOUT`、`E_RATE_LIMIT`、`E_INVALID_INPUT`、`E_RESOURCE_NOT_FOUND`、`E_PROJECT_ARTIFACT_MISSING`（项目产物缺失）、`E_QUEUE_FULL`（并发队列满）、`E_PROVIDER_ERROR`、`E_UNKNOWN`。
+
+**Claude Code 配置示例：**
+
+```json
+{
+  "mcpServers": {
+    "openmontage": {
+      "command": "python",
+      "args": [
+        "-m",
+        "openmontage_mcp.server",
+        "--project-dir",
+        "/path/to/openmontage-zh-mcp"
+      ]
+    }
+  }
+}
+```
+
 （普通用户可以先忽略这一条，等用熟了再了解。）
 
 ---

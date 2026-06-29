@@ -227,7 +227,7 @@ VIDEO_GEN_LOCAL_MODEL=wan2.1-1.3b  # 或 wan2.1-14b, hunyuan-1.5, ltx2-local, co
 
 ## MCP Server（让其他 Agent 调用 OpenMontage）
 
-OpenMontage 同时提供了一个 **MCP Server**，允许外部智能体（Claude Code、Cursor、Copilot 等）通过 stdio 协议直接调用其 90+ 工具和流水线能力，无需常驻端口：
+OpenMontage 同时提供了一个 **MCP Server**，允许外部智能体（Claude Code、Cursor、Copilot、CrewAI 等）通过 stdio 协议直接调用其 90+ 工具和流水线能力，无需常驻端口。
 
 ```bash
 # 安装 MCP 依赖
@@ -237,34 +237,110 @@ pip install -e ".[mcp]"
 python -m openmontage_mcp.server --project-dir /path/to/OpenMontage-main
 ```
 
-暴露的核心能力：
+### 暴露的 MCP 工具（业务级入口）
 
-| MCP 工具 | 作用 |
-|---|---|
-| `list_capabilities` | 返回可用工具/能力菜单 |
-| `run_tool` | 按名称执行任意 tool |
-| `render_video` | 渲染视频（Remotion / HyperFrames / FFmpeg） |
-| `run_pipeline_stage` | 推进一个 pipeline stage |
-| `get_pipeline_status` | 查询项目进度 |
-| `get_job_status` | 查询异步任务状态 |
+MCP 层只暴露 9 个业务级工具，底层 provider 工具（如 `autodl_video`、`seedance_video`）不再作为独立 MCP 工具出现。
 
-在 Claude Code 中的配置示例：
+| MCP 工具 | 作用 | 关键行为 |
+|---|---|---|
+| `list_capabilities` | 起飞检查 + 查询每个工具的完整参数 schema | 支持 `category` 过滤，例如 `video_generation`；不传则返回全部 |
+| `create_project` | 创建项目工作区 | 返回 `project_id` 和流水线阶段列表 |
+| `get_project_status` | 查询项目进度 | 返回已完成阶段、当前阶段、等待人类审批的阶段 |
+| `run_tool` | 执行任意 OpenMontage 工具 | **自动判断同步/异步**：短任务直接返回结果，长任务自动返回 `job_id` |
+| `render_video` | 渲染最终成片 | 自动读取项目的 `edit_decisions` + `asset_manifest`（缺失返回 `E_PROJECT_ARTIFACT_MISSING`），异步返回 `job_id` |
+| `get_job_status` | 轮询异步任务 | 返回 `status`、`progress_percent`、`estimated_remaining_seconds`、`next_action` |
+| `list_jobs` | 列出所有异步任务 | 可按 `status` 或 `tool_name` 过滤 |
+| `cancel_job` | 取消异步任务 | 用于重试或用户变更需求 |
+| `write_checkpoint` | 写入流水线阶段检查点 | 推进或标记阶段状态 |
+
+### Agent 使用规则
+
+1. **不要直接调用底层 provider 工具名。** `autodl_video` 等只应作为 `run_tool` 的 `name` 参数。
+2. **所有可能慢的操作都异步。** `run_tool` 根据 `estimate_runtime()` 自动 defer；拿到 `job_id` 就用 `get_job_status` 轮询。
+3. **项目路径显式传递。** 调用 `run_tool` 时通过 `project_id` 指定项目，相对路径自动解析为 `projects/<project_id>/` 下的绝对路径（支持嵌套）。
+4. **先看错误码再决策。** 错误码包括：`E_AUTH`、`E_TIMEOUT`、`E_RATE_LIMIT`、`E_INVALID_INPUT`、`E_RESOURCE_NOT_FOUND`、`E_PROJECT_ARTIFACT_MISSING`、`E_QUEUE_FULL`、`E_PROVIDER_ERROR`、`E_UNKNOWN`。
+5. **并发上限默认 4。** 超过会返回 `E_QUEUE_FULL`，Agent 应等待或用 `list_jobs` 查看。
+
+### AutoDL 视频生成示例（两步轮询）
+
+第一步，创建生成任务（异步）：
+
+```json
+{
+  "name": "autodl_video",
+  "project_id": "my-project",
+  "inputs": {
+    "prompt": "清晨宁静的湖面，薄雾升起，电影级广角镜头",
+    "model": "doubao-seedance-2-0-260128",
+    "operation": "text_to_video",
+    "duration": 5,
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "output_path": "assets/video/clip_01.mp4"
+  }
+}
+```
+
+返回：
+
+```json
+{
+  "status": "queued",
+  "job_id": "...",
+  "tool_name": "autodl_video",
+  "estimated_seconds": 120,
+  "next_action": "poll_get_job_status"
+}
+```
+
+用 `get_job_status` 轮询。完成后，底层结果里会有 `task_id`。
+
+第二步，用 `task_id` 轮询视频完成状态：
+
+```json
+{
+  "name": "autodl_video",
+  "project_id": "my-project",
+  "inputs": {
+    "operation": "get_status",
+    "task_id": "cgt-xxxxxxxx",
+    "output_path": "assets/video/clip_01.mp4"
+  }
+}
+```
+
+重复调用直到 `data.status` 变为 `succeeded`，视频会自动下载到 `projects/my-project/assets/video/clip_01.mp4`。
+
+### 在 Claude Code 中配置
 
 ```json
 {
   "mcpServers": {
     "openmontage": {
       "command": "python",
-      "args": ["-m", "openmontage_mcp.server", "--project-dir", "/Users/tannoah/Project/openmontage/OpenMontage-main"]
+      "args": [
+        "-m",
+        "openmontage_mcp.server",
+        "--project-dir",
+        "/Users/tannoah/Project/openmontage/OpenMontage-main"
+      ]
     }
   }
 }
 ```
 
-调试可用 MCP Inspector：
+如果项目安装在虚拟环境中，请使用该虚拟环境的 Python 路径。
+
+### 调试
 
 ```bash
 make mcp-inspector
+```
+
+端到端验证脚本：
+
+```bash
+python3 scripts/test_mcp_smoke.py
 ```
 
 ---

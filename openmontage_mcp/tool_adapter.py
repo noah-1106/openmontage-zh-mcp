@@ -17,6 +17,8 @@ class MCPErrorCode:
     INVALID_INPUT = "E_INVALID_INPUT"
     RATE_LIMIT = "E_RATE_LIMIT"
     RESOURCE_NOT_FOUND = "E_RESOURCE_NOT_FOUND"
+    PROJECT_ARTIFACT_MISSING = "E_PROJECT_ARTIFACT_MISSING"
+    QUEUE_FULL = "E_QUEUE_FULL"
     PROVIDER_ERROR = "E_PROVIDER_ERROR"
     UNKNOWN = "E_UNKNOWN"
 
@@ -34,6 +36,10 @@ def classify_error(error_text: str | None) -> str:
         return MCPErrorCode.RATE_LIMIT
     if any(k in err for k in ("not found", "404", "resource not found", "invalid url")):
         return MCPErrorCode.RESOURCE_NOT_FOUND
+    if any(k in err for k in ("artifact", "edit_decisions", "asset_manifest")):
+        return MCPErrorCode.PROJECT_ARTIFACT_MISSING
+    if any(k in err for k in ("queue full", "concurrent job limit", "too many concurrent")):
+        return MCPErrorCode.QUEUE_FULL
     if any(k in err for k in ("validation failed", "invalid", "required", "schema")):
         return MCPErrorCode.INVALID_INPUT
     if any(k in err for k in ("http 5", "service unavailable", "internal server", "provider error")):
