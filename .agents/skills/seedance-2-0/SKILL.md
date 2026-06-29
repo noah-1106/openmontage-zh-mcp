@@ -37,6 +37,7 @@ Switch away only for a specific reason: strict budget (use the `fast` variant or
 | Surface | Env | OpenMontage tool | Status | Notes |
 |---|---|---|---|---|
 | **fal.ai** (primary) | `FAL_KEY` | `seedance_video` | ✅ wrapped | Model IDs below. Supports T2V, I2V, reference-to-video; `standard` and `fast` variants. Default in OpenMontage. |
+| **AutoDL 模型广场** | `AUTODL_API_KEY` | `autodl_video` | ✅ wrapped | Domestic Chinese gateway to Volcano Ark / Doubao Seedance 2.0. Uses async task API; see AutoDL polling notes below. |
 | **Replicate** | `REPLICATE_API_TOKEN` | `seedance_replicate` | ✅ wrapped | `bytedance/seedance-2.0` + `bytedance/seedance-2.0-fast`. Standard Replicate prediction API. |
 | **Runway** | `RUNWAY_API_KEY` | `runway_video` (model: `seedance_2.0`) | ✅ wrapped | Third-party Seedance 2.0 model inside Runway. **Unlimited/Enterprise plans, non-US only**. Selected via `model` param. |
 | **Higgsfield** | `HIGGSFIELD_API_KEY` + `_SECRET` | `higgsfield_video` (model: `seedance_2.0`) | ✅ wrapped | Seedance 2.0 is the default model on this tool. Emphasis on character identity + long-form chaining. |
@@ -94,6 +95,50 @@ seedance.execute({
     "output_path": "...",
 })
 ```
+
+### AutoDL gateway (`autodl_video`) — async polling required
+
+The AutoDL/Volcano Ark endpoint is synchronous at the transport layer: if you wait on the initial POST for the full generation, MCP/agent call timeouts (often 30s) will kill the request before the video finishes. `autodl_video` therefore splits the workflow into two short calls:
+
+1. **Create the task** — returns immediately with a `task_id`:
+
+   ```python
+   autodl = registry.get("autodl_video")
+   create_result = autodl.execute({
+       "prompt": PROMPT,
+       "model": "doubao-seedance-2-0-260128",
+       "operation": "text_to_video",
+       "aspect_ratio": "16:9",
+       "duration": 5,
+       "resolution": "720p",
+       "generate_audio": True,
+       "output_path": "projects/<proj>/assets/video/clip_01.mp4",
+   })
+   # create_result.data == {"task_id": "...", "status": "created", ...}
+   ```
+
+2. **Poll until done** — each call is fast and safe under short timeouts:
+
+   ```python
+   import time
+   task_id = create_result.data["task_id"]
+   while True:
+       poll = autodl.execute({
+           "operation": "get_status",
+           "task_id": task_id,
+           "output_path": "projects/<proj>/assets/video/clip_01.mp4",
+       })
+       if poll.data.get("status") == "succeeded":
+           break
+       if not poll.success:
+           raise RuntimeError(poll.error)
+       time.sleep(10)
+   # poll.data["output"] contains the downloaded MP4 path
+   ```
+
+When routing through `video_selector`, the selector does **not** know about this two-step protocol. If the scorer picks `autodl_video`, you must handle the create-then-poll pattern yourself after the selector returns the first `created` result.
+
+Recommended polling interval: **10 seconds**. Do not poll more frequently; AutoDL/Volcano rate-limits status checks.
 
 ## Prompt structure — The Higgsfield Methodology (canonical as of 2026)
 

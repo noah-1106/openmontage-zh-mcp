@@ -65,7 +65,7 @@ class AutoDLVideo(BaseTool):
 
     input_schema = {
         "type": "object",
-        "required": ["prompt"],
+        "required": [],
         "properties": {
             "prompt": {"type": "string"},
             "model": {
@@ -75,8 +75,16 @@ class AutoDLVideo(BaseTool):
             },
             "operation": {
                 "type": "string",
-                "enum": ["text_to_video", "image_to_video", "reference_to_video"],
+                "enum": ["text_to_video", "image_to_video", "reference_to_video", "get_status"],
                 "default": "text_to_video",
+                "description": (
+                    "Generation operations create a task and return a task_id immediately. "
+                    "Use get_status with task_id to poll for completion and download the video."
+                ),
+            },
+            "task_id": {
+                "type": "string",
+                "description": "Required for operation=get_status. The task ID returned by a previous generation call.",
             },
             "duration": {
                 "type": "integer",
@@ -172,6 +180,28 @@ class AutoDLVideo(BaseTool):
         tasks_url = f"{base_url}/ark/v3/contents/generations/tasks"
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
+        operation = inputs.get("operation", "text_to_video")
+
+        if operation == "get_status":
+            return self._poll_task(inputs, tasks_url, headers, start)
+
+        if "prompt" not in inputs:
+            return ToolResult(
+                success=False,
+                error="prompt is required for generation operations",
+            )
+
+        return self._create_task(inputs, tasks_url, headers, start)
+
+    def _create_task(
+        self,
+        inputs: dict[str, Any],
+        tasks_url: str,
+        headers: dict[str, str],
+        start: float,
+    ) -> ToolResult:
+        import requests
+
         model = inputs.get("model", "doubao-seedance-2-0-260128")
         operation = inputs.get("operation", "text_to_video")
 
@@ -225,9 +255,9 @@ class AutoDLVideo(BaseTool):
         }
 
         try:
-            # AutoDL may keep the POST connection open until the task completes
-            # (synchronous-style endpoint), so give it a generous timeout.
-            create_resp = requests.post(tasks_url, headers=headers, json=payload, timeout=300)
+            # Create the task quickly; do not wait for completion here.
+            # Long-running synchronous endpoints are killed by MCP/agent 30s timeouts.
+            create_resp = requests.post(tasks_url, headers=headers, json=payload, timeout=30)
             if not create_resp.ok:
                 detail = create_resp.text or "no response body"
                 return ToolResult(
@@ -239,32 +269,88 @@ class AutoDLVideo(BaseTool):
                     ),
                 )
             task_id = create_resp.json()["id"]
+        except Exception as e:
+            return ToolResult(success=False, error=f"AutoDL video task creation failed: {e}")
 
-            while True:
-                time.sleep(10)
-                status_resp = requests.get(
-                    f"{tasks_url}/{task_id}", headers=headers, timeout=120
+        return ToolResult(
+            success=True,
+            data={
+                "provider": "autodl",
+                "model": model,
+                "operation": operation,
+                "task_id": task_id,
+                "status": "created",
+                "message": "Task created. Poll with operation='get_status' and task_id.",
+            },
+            cost_usd=0.0,
+            duration_seconds=round(time.time() - start, 2),
+            model=model,
+        )
+
+    def _poll_task(
+        self,
+        inputs: dict[str, Any],
+        tasks_url: str,
+        headers: dict[str, str],
+        start: float,
+    ) -> ToolResult:
+        import requests
+
+        task_id = inputs.get("task_id")
+        if not task_id:
+            return ToolResult(
+                success=False,
+                error="operation=get_status requires task_id",
+            )
+
+        try:
+            status_resp = requests.get(
+                f"{tasks_url}/{task_id}", headers=headers, timeout=120
+            )
+            if not status_resp.ok:
+                detail = status_resp.text or "no response body"
+                return ToolResult(
+                    success=False,
+                    error=(
+                        f"AutoDL video task status check failed with HTTP {status_resp.status_code}.\n"
+                        f"Response: {detail[:800]}"
+                    ),
                 )
-                if not status_resp.ok:
-                    detail = status_resp.text or "no response body"
-                    return ToolResult(
-                        success=False,
-                        error=(
-                            f"AutoDL video task status check failed with HTTP {status_resp.status_code}.\n"
-                            f"Response: {detail[:800]}"
-                        ),
-                    )
-                status_data = status_resp.json()
-                status = status_data.get("status")
+            status_data = status_resp.json()
+            status = status_data.get("status")
 
-                if status == "succeeded":
-                    break
-                if status in ("failed", "cancelled"):
-                    error_msg = status_data.get("error") or f"task {status}"
-                    return ToolResult(
-                        success=False,
-                        error=f"AutoDL video generation {status}: {error_msg}",
-                    )
+            if status in ("queued", "in_progress", "running"):
+                return ToolResult(
+                    success=True,
+                    data={
+                        "provider": "autodl",
+                        "task_id": task_id,
+                        "status": status,
+                        "message": "Task is still processing. Poll again with operation='get_status'.",
+                    },
+                    cost_usd=0.0,
+                    duration_seconds=round(time.time() - start, 2),
+                )
+
+            if status in ("failed", "cancelled"):
+                error_msg = status_data.get("error") or f"task {status}"
+                return ToolResult(
+                    success=False,
+                    error=f"AutoDL video generation {status}: {error_msg}",
+                )
+
+            if status != "succeeded":
+                return ToolResult(
+                    success=True,
+                    data={
+                        "provider": "autodl",
+                        "task_id": task_id,
+                        "status": status,
+                        "message": "Task status unknown. Poll again with operation='get_status'.",
+                    },
+                    cost_usd=0.0,
+                    duration_seconds=round(time.time() - start, 2),
+                )
 
             video_url = status_data["content"]["video_url"]
             video_resp = requests.get(video_url, timeout=120)
@@ -277,13 +363,15 @@ class AutoDLVideo(BaseTool):
         except Exception as e:
             return ToolResult(success=False, error=f"AutoDL video generation failed: {e}")
 
+        model = status_data.get("model", inputs.get("model", "doubao-seedance-2-0-260128"))
         return ToolResult(
             success=True,
             data={
                 "provider": "autodl",
                 "model": model,
-                "prompt": inputs["prompt"],
-                "operation": operation,
+                "task_id": task_id,
+                "status": "succeeded",
+                "operation": status_data.get("operation") or inputs.get("operation"),
                 "duration": status_data.get("duration"),
                 "resolution": status_data.get("resolution"),
                 "ratio": status_data.get("ratio"),
